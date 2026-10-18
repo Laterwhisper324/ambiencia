@@ -6,7 +6,7 @@
 
 ## 🏗️ Arquitetura e Stack
 
-```
+```text
 ambiencia/
 ├── client/                     # Frontend React 18 + Vite + TypeScript + Tailwind CSS
 │   ├── src/
@@ -34,45 +34,91 @@ ambiencia/
 
 ---
 
-## 🚀 Instalação e Execução Local
+## 🚀 Passo a Passo para Iniciar o Servidor Corretamente
 
 ### Pré-requisitos
 - **Node.js** 20+ (ou 22 / 24 LTS) e **npm**
 
-### 1. Configurar variáveis de ambiente
-Copie o arquivo `.env.example` para `server/.env`:
-```bash
-cp .env.example server/.env
+### Passo 1: Abrir o terminal na pasta do projeto
+No **PowerShell** (ou terminal integrado do editor):
+```powershell
+cd C:\Users\nceci\.gemini\antigravity\scratch\ambiencia
 ```
-*(Por padrão, a senha do anfitrião é `HOST_PASSWORD=mestre123`, o banco SQLite fica em `server/data/ambiencia.sqlite` e os uploads ficam em `server/uploads`).*
 
-### 2. Instalar dependências
-Na pasta raiz do projeto:
-```bash
+### Passo 2: Instalar dependências e compilar (apenas na 1ª vez ou após alterações no código)
+```powershell
 npm run install:all
+npm run build
 ```
+*(O comando `npm run build` compila o frontend React em `client/dist` e o backend TypeScript em `server/dist`).*
 
-### 3. Iniciar em modo de desenvolvimento
-Você pode rodar o backend (porta `3001`) e o frontend Vite (porta `5173`):
-```bash
-# Terminal 1 — Servidor Node + Socket.IO + SQLite
-npm run dev:server
-
-# Terminal 2 — Cliente React + Vite
-npm run dev:client
+### Passo 3: Iniciar o servidor unificado (Porta 3001)
+```powershell
+npm run start
 ```
-Acesse **`http://localhost:5173`** no navegador.
+Você verá no terminal:
+```text
+========================================================
+🎵 Ambiência Server rodando na porta 3001
+📁 Upload Dir: ...\ambiencia\server\uploads (Provider: local)
+🗄️  SQLite DB:  ...\ambiencia\server\data\ambiencia.sqlite
+🔑 Senha Anfitrião (HOST_PASSWORD): mestre123
+========================================================
+```
+> **Importante:** Mantenha esse terminal aberto enquanto estiver usando o aplicativo.
 
-> **Modo de Produção Único (porta 3001):**
-> ```bash
-> npm run build
-> npm run start
-> ```
-> O Express servirá tanto a API/Socket.IO quanto o bundle estático do frontend em `http://localhost:3001`.
+### Passo 4: Acessar o Painel do Mestre (Anfitrião)
+- Abra no seu navegador: **`http://localhost:3001`**
+- Senha padrão do anfitrião: **`mestre123`** (configurada em `server/.env` na variável `HOST_PASSWORD`).
+
+> **Modo Desenvolvimento (Opcional — Hot Reload):**
+> Caso esteja editando o código-fonte ao vivo, você também pode rodar em dois terminais separados:
+> - Terminal 1: `npm run dev:server` (API + Socket.IO na porta `3001`)
+> - Terminal 2: `npm run dev:client` (Vite com Hot Reload na porta `5173`)
 
 ---
 
-## 🎮 Guia de Uso
+## 🌐 Como Enviar para Outros Jogadores Ouvirem ao Vivo
+
+⚠️ **Atenção sobre `localhost`:**
+Quando você abre o painel em `http://localhost:3001` e clica em **Compartilhar**, o navegador copia `http://localhost:3001/sala/AB12CD`.
+A palavra `localhost` significa *"este próprio computador"* — ela serve para você testar o **Modo Ouvinte** em outra aba do seu próprio PC, mas **não abrirá no computador ou celular de outra pessoa**.
+
+Para enviar aos seus jogadores, escolha uma das opções abaixo:
+
+### Opção 1: Compartilhar pela Internet direto do seu PC (Grátis, sem criar conta)
+1. Deixe o **Terminal 1** rodando o servidor (`npm run start`).
+2. Abra um **segundo terminal PowerShell (Terminal 2)** e execute o túnel público da Cloudflare:
+   ```powershell
+   npx cloudflared tunnel --url http://localhost:3001
+   ```
+   *(Se perguntar `Ok to proceed? (y)`, digite `y` e pressione Enter).*
+3. Aguarde aparecer no terminal uma caixa com seu link público `.trycloudflare.com`:
+   ```text
+   +--------------------------------------------------------------------------------------------+
+   |  Your quick Tunnel has been created! Visit it at (it may take some time to be reachable):  |
+   |  https://exemplo-aleatorio-123.trycloudflare.com                                           |
+   +--------------------------------------------------------------------------------------------+
+   ```
+4. **Abra esse endereço `https://...trycloudflare.com` no seu navegador** (ou adicione `/sala/AB12CD` no final dele) e clique no botão **Compartilhar**:
+   ```text
+   https://exemplo-aleatorio-123.trycloudflare.com/sala/AB12CD
+   ```
+5. Envie esse link no **Discord / WhatsApp** da mesa:
+   - Os jogadores abrem o link no navegador (PC ou celular, sem conta e sem senha).
+   - Eles clicam no botão **"Entrar e ouvir"** para liberar o áudio do navegador.
+   - Tudo o que você tocar (cenas `1` a `9`, MP3 do seu computador, vídeos do YouTube e camada de som ambiente) tocará em sincronia no navegador deles!
+
+### Opção 2: Jogadores na mesma casa (Mesma rede Wi-Fi)
+1. Descubra o IP local do seu computador rodando `ipconfig` no PowerShell (ex.: `192.168.1.15`).
+2. Envie para os jogadores no mesmo Wi-Fi:
+   ```text
+   http://192.168.1.15:3001/sala/AB12CD
+   ```
+
+---
+
+## 🎮 Guia das Funcionalidades
 
 ### 1. Dados de Exemplo Pré-carregados (Seed Automático)
 Ao iniciar pela primeira vez, o servidor popula automaticamente o banco SQLite e gera arquivos de áudio demonstrativos em `UPLOAD_DIR`:
@@ -96,29 +142,18 @@ Ao iniciar pela primeira vez, o servidor popula automaticamente o banco SQLite e
 - **Dual-Deck Crossfade (0 a 10 s):** Na barra lateral esquerda, ajuste o tempo de crossfade. Dois elementos `<audio>` alternam entre si realizando fade-out na faixa atual e fade-in na nova faixa quando você troca de cena ou avança na fila.
 - **Camada Ambiente em Loop:** Selecione qualquer faixa de ambiente (ex.: *Chuva*, *Lareira*, *Mar*) na barra lateral para tocar em loop contínuo junto com a música principal, com controle de volume independente.
 
-### 4. Modo Ouvinte e Compartilhamento Ao Vivo (`/sala/AB12CD`)
-- Clique em **Compartilhar** no topo para copiar o link da sala (ex.: `http://localhost:5173/sala/AB12CD`) ou em **+ Nova Sala** para gerar um novo código curto.
-- Qualquer pessoa que abrir o link verá o botão **"Entrar e ouvir"** (necessário para desbloquear a política de autoplay dos navegadores modernos).
-- O servidor sincroniza faixa atual, posição, play/pausa, cena ativa e camada ambiente via **Socket.IO**, estimando a latência de rede via ping/pong (`clock:ping` / `clock:pong`) e corrigindo automaticamente desvios superiores a **~1 segundo**.
-
 ---
 
-## ☁️ Deploy Passo a Passo (Render ou Railway)
+## ☁️ Deploy Passo a Passo na Nuvem 24h (Render ou Railway)
 
-Como o **Ambiência** utiliza conexões persistentes WebSocket (**Socket.IO**) e mantém estado de sincronização em memória + SQLite, ele deve ser hospedado como um **Serviço Web Contínuo (Web Service)**, e **não** em plataformas serverless (como Vercel Functions).
+Caso queira deixar o site hospedado na nuvem 24 horas por dia (sem depender do seu PC ligado), utilize o `Dockerfile` incluso:
 
-### Opção A: Deploy no Render.com
-1. Suba este repositório no GitHub/GitLab.
-2. No painel do **Render**, clique em **New +** → **Web Service** e conecte o repositório.
-3. Configure o serviço:
-   - **Runtime:** `Docker` (utilizará automaticamente o `Dockerfile` na raiz).
-   - **Instance Type:** Starter (ou superior, para suportar **Persistent Disk**).
-4. **Adicionar Disco Persistente (Volume):**
-   - Vá na aba **Disks** do serviço → **Add Disk**.
-   - **Name:** `ambiencia-data`
-   - **Mount Path:** `/data`
-   - **Size:** `10 GB` (ou conforme sua biblioteca de MP3).
-5. **Variáveis de Ambiente (`Environment`):**
+### Opção A: Deploy no Railway.app
+1. Suba este repositório no GitHub.
+2. No painel do **Railway**, clique em **New Project** → **Deploy from GitHub repo**.
+3. O Railway detectará automaticamente o `Dockerfile` na raiz.
+4. Clique com o botão direito no serviço → **Attach Volume** e defina o mount path como `/data`.
+5. Na aba **Variables**, configure:
    - `NODE_ENV=production`
    - `PORT=3001`
    - `HOST_PASSWORD=sua_senha_forte_aqui`
@@ -126,23 +161,21 @@ Como o **Ambiência** utiliza conexões persistentes WebSocket (**Socket.IO**) e
    - `DATABASE_PATH=/data/ambiencia.sqlite`
    - `MAX_UPLOAD_MB=50`
    - `STORAGE_PROVIDER=local`
-6. **Domínio e HTTPS:**
-   - O Render fornece HTTPS automático (`https://seu-app.onrender.com`) e suporta domínios customizados em **Settings → Custom Domains**. O Express já está configurado com `app.set('trust proxy', 1)`.
+6. Em **Settings → Networking**, clique em **Generate Domain** para obter seu endereço `https://seu-app.up.railway.app`.
 
-### Opção B: Deploy no Railway.app
-1. No painel do **Railway**, clique em **New Project** → **Deploy from GitHub repo**.
-2. O Railway detectará automaticamente o `Dockerfile` na raiz.
-3. Clique com o botão direito no serviço → **Attach Volume** e defina o mount path como `/data`.
-4. Na aba **Variables**, configure as mesmas variáveis listadas acima (`UPLOAD_DIR=/data/uploads`, `DATABASE_PATH=/data/ambiencia.sqlite`, `HOST_PASSWORD`, etc.).
-5. Em **Settings → Networking**, clique em **Generate Domain** (ou conecte seu domínio próprio com HTTPS automático).
+### Opção B: Deploy no Render.com
+1. No painel do **Render**, clique em **New +** → **Web Service** e conecte seu repositório GitHub.
+2. Selecione **Runtime:** `Docker`.
+3. Na aba **Disks**, adicione um disco persistente (**Mount Path:** `/data`).
+4. Configure as variáveis de ambiente listadas acima (`UPLOAD_DIR=/data/uploads`, `DATABASE_PATH=/data/ambiencia.sqlite`, `HOST_PASSWORD`, etc.).
 
 ---
 
 ## 🪣 Como Migrar os Uploads para S3 / Cloudflare R2 (Sem Disco Persistente)
 
-Caso você escolha um plano de hospedagem sem volume de disco persistente para os arquivos de áudio, o backend já possui a classe `S3StorageProvider` implementada em [`server/src/storage/StorageProvider.ts`](server/src/storage/StorageProvider.ts) usando o AWS SDK v3 (`@aws-sdk/client-s3`).
+Caso escolha um plano gratuito na nuvem sem volume de disco persistente para os arquivos de áudio, o backend possui a classe `S3StorageProvider` implementada em [`server/src/storage/StorageProvider.ts`](server/src/storage/StorageProvider.ts) usando `@aws-sdk/client-s3`.
 
-Para migrar do disco local para **Cloudflare R2** ou **Amazon S3**, basta alterar as variáveis de ambiente (sem precisar mudar nenhuma linha de código):
+Basta alterar as variáveis de ambiente:
 
 ```env
 STORAGE_PROVIDER=s3
@@ -154,9 +187,6 @@ S3_SECRET_ACCESS_KEY=sua_secret_access_key
 # Opcional: se o bucket tiver domínio público / CDN configurado:
 S3_PUBLIC_BASE_URL=https://cdn.seudominio.com
 ```
-- Quando `STORAGE_PROVIDER=s3`:
-  - Novos uploads MP3 são enviados diretamente para o bucket via `PutObjectCommand`.
-  - A rota `/api/tracks/:id/stream` redireciona (`302`) para a URL pública do CDN (`S3_PUBLIC_BASE_URL`) ou gera automaticamente uma **Presigned URL** temporária (`GetObjectCommand` com `getSignedUrl`), preservando suporte nativo a HTTP Range requests diretamente da borda do S3/R2!
 
 ---
 
