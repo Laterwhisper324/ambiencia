@@ -1,0 +1,14 @@
+{
+  "name": "ambiencia",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Ambiência — Player de trilhas sonoras por cenas para RPG, streams e eventos com sincronização em tempo real",
+  "scripts": {
+    "install:all": "npm --prefix server install && npm --prefix server rebuild better-sqlite3 esbuild && npm --prefix client install && npm --prefix client rebuild esbuild",
+    "dev:server": "npm --prefix server run dev",
+    "dev:client": "npm --prefix client run dev",
+    "build": "npm --prefix client run build && npm --prefix server run build",
+    "start": "npm --prefix server run start",
+    "seed": "npm --prefix server run seed"
+  }
+}
