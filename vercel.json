@@ -4,6 +4,8 @@
     "client": {
       "root": "client",
       "framework": "vite",
+      "installCommand": "rm -rf node_modules package-lock.json && npm install && npm rebuild",
+      "buildCommand": "npm run build",
       "bindings": [
         {
           "type": "service",
@@ -16,7 +18,8 @@
     "server": {
       "root": "server",
       "framework": "express",
-      "entrypoint": "src/index.ts"
+      "entrypoint": "src/index.ts",
+      "installCommand": "rm -rf node_modules package-lock.json && npm install && npm rebuild"
     }
   },
   "rewrites": [
