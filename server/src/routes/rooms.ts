@@ -3,7 +3,9 @@ import { isValidHostAuth } from '../middleware/auth';
 import {
   computeCurrentPosition,
   createNewRoom,
+  executeHostCommand,
   loadOrCreateRoom,
+  touchRoomClient,
 } from '../socket/roomManager';
 
 export const roomsRouter = Router();
@@ -71,15 +73,50 @@ roomsRouter.post('/', (req: Request, res: Response) => {
   });
 });
 
-// GET /api/rooms/:code - Fetch room state
+// GET /api/rooms/:code - Fetch room state & record active listener heartbeat
 roomsRouter.get('/:code', (req: Request, res: Response) => {
   const code = req.params.code.trim().toUpperCase();
-  const { state } = loadOrCreateRoom(code);
+  const clientId = typeof req.query.clientId === 'string' ? req.query.clientId : undefined;
+  const password = req.headers['x-host-password'] as string | undefined;
+  const token = req.headers['x-host-token'] as string | undefined;
+
+  const { state, hostToken } = loadOrCreateRoom(code);
+  const listenerCount = touchRoomClient(code, clientId);
+  state.listenerCount = listenerCount;
+  const isHost = isValidHostAuth(password, token, code);
+
   res.json({
     state: {
       ...state,
+      listenerCount,
       positionSec: computeCurrentPosition(state),
       serverNow: Date.now(),
     },
+    isHost,
+    hostToken: isHost ? hostToken : undefined,
   });
+});
+
+// POST /api/rooms/:code/command - Execute host playback command via HTTP (for serverless / fallback)
+roomsRouter.post('/:code/command', (req: Request, res: Response) => {
+  const code = req.params.code.trim().toUpperCase();
+  const password = (req.headers['x-host-password'] as string) || req.body?.password;
+  const hostToken = (req.headers['x-host-token'] as string) || req.body?.hostToken;
+
+  const result = executeHostCommand(
+    {
+      ...req.body,
+      code,
+      password,
+      hostToken,
+    },
+    code
+  );
+
+  if (!result.ok) {
+    res.status(401).json(result);
+    return;
+  }
+
+  res.json(result);
 });

@@ -65,7 +65,7 @@ const apiLimiter = rateLimit({
 app.use('/api', apiLimiter);
 
 // Healthcheck endpoint
-app.get('/api/health', (_req, res) => {
+const healthHandler: express.RequestHandler = (_req, res) => {
   res.json({
     status: 'ok',
     app: 'Ambiência',
@@ -73,17 +73,23 @@ app.get('/api/health', (_req, res) => {
     maxUploadMb: config.maxUploadMb,
     serverTime: Date.now(),
   });
-});
+};
+app.get('/api/health', healthHandler);
+app.get('/health', healthHandler);
 
-// Mount API routes
+// Mount API routes (both with and without /api prefix for Vercel Services compatibility)
 app.use('/api/tracks', tracksRouter);
+app.use('/tracks', tracksRouter);
 app.use('/api/playlists', playlistsRouter);
+app.use('/playlists', playlistsRouter);
 app.use('/api/scenes', scenesRouter);
+app.use('/scenes', scenesRouter);
 app.use('/api/rooms', roomsRouter);
+app.use('/rooms', roomsRouter);
 
 // Serve static frontend in standalone production (when client/dist exists)
 const clientDistPath = path.resolve(__dirname, '../../client/dist');
-if (fs.existsSync(clientDistPath)) {
+if (!process.env.VERCEL && fs.existsSync(clientDistPath)) {
   app.use(express.static(clientDistPath));
   app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api') || req.path.startsWith('/socket.io')) {
@@ -94,20 +100,20 @@ if (fs.existsSync(clientDistPath)) {
   });
 }
 
-const server = http.createServer(app);
-const io = new SocketIOServer(server, {
-  cors: {
-    origin: '*',
-    methods: ['GET', 'POST'],
-  },
-  pingInterval: 10000,
-  pingTimeout: 8000,
-});
-
-setupSocketServer(io);
-
-// Start HTTP + Socket.IO server when running as a continuous process
+// Start HTTP + Socket.IO server when running as a continuous process (local / Docker / Render / Railway)
 if (!process.env.VERCEL) {
+  const server = http.createServer(app);
+  const io = new SocketIOServer(server, {
+    cors: {
+      origin: '*',
+      methods: ['GET', 'POST'],
+    },
+    pingInterval: 10000,
+    pingTimeout: 8000,
+  });
+
+  setupSocketServer(io);
+
   seedReadyPromise.then(() => {
     server.listen(config.port, () => {
       console.log(`========================================================`);

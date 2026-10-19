@@ -201,38 +201,6 @@ export const App: React.FC = () => {
     [localMuted, localVolume]
   );
 
-  // Send host command via Socket.IO
-  const sendHostCommand = useCallback(
-    (
-      action:
-        | 'play'
-        | 'pause'
-        | 'seek'
-        | 'set_track'
-        | 'set_playlist'
-        | 'trigger_scene'
-        | 'next'
-        | 'prev'
-        | 'set_volume'
-        | 'set_shuffle'
-        | 'set_repeat'
-        | 'set_crossfade'
-        | 'set_ambient'
-        | 'sync_heartbeat',
-      extra: Record<string, unknown> = {}
-    ) => {
-      if (!socketRef.current) return;
-      socketRef.current.emit('host:command', {
-        code: roomCode,
-        password: getStoredHostPassword(),
-        hostToken: getStoredHostToken(),
-        action,
-        ...extra,
-      });
-    },
-    [roomCode]
-  );
-
   // Apply room state to Dual-Deck MP3 Engine, YouTube IFrame Player, and Ambient Loop Deck
   const applyPlaybackStateToEngines = useCallback(
     (state: RoomPlaybackState, forceFadeTransition = false) => {
@@ -386,14 +354,149 @@ export const App: React.FC = () => {
     ]
   );
 
-  // Connect Socket.IO and join current room
+  // Unified handler to ingest RoomPlaybackState from either Socket.IO or HTTP REST
+  const applyIncomingRoomState = useCallback(
+    (incoming: RoomPlaybackState) => {
+      const serverElapsed = Math.max(
+        0,
+        ((incoming.serverNow || Date.now()) - incoming.updatedAt) / 1000
+      );
+      lastPacketRef.current = {
+        basePositionSec: incoming.positionSec,
+        serverElapsedSec: serverElapsed,
+        receivedPerfMs: performance.now(),
+        isPlaying: incoming.isPlaying,
+      };
+      setRoomState((prev) => {
+        const sceneChanged = prev?.activeSceneId !== incoming.activeSceneId;
+        window.setTimeout(() => {
+          applyPlaybackStateToEngines(incoming, sceneChanged);
+        }, 0);
+        return incoming;
+      });
+      setListenerCount(incoming.listenerCount || 1);
+      if (!incoming.isPlaying) {
+        setDisplayPositionSec(incoming.positionSec);
+      }
+      if (incoming.currentTrack?.durationSec) {
+        setDisplayDurationSec(incoming.currentTrack.durationSec);
+      }
+    },
+    [applyPlaybackStateToEngines]
+  );
+
+  // Send host command via Socket.IO when connected, or via HTTP REST fallback (Serverless / Vercel)
+  const sendHostCommand = useCallback(
+    (
+      action:
+        | 'play'
+        | 'pause'
+        | 'seek'
+        | 'set_track'
+        | 'set_playlist'
+        | 'trigger_scene'
+        | 'next'
+        | 'prev'
+        | 'set_volume'
+        | 'set_shuffle'
+        | 'set_repeat'
+        | 'set_crossfade'
+        | 'set_ambient'
+        | 'sync_heartbeat',
+      extra: Record<string, unknown> = {}
+    ) => {
+      if (socketRef.current?.connected) {
+        socketRef.current.emit('host:command', {
+          code: roomCode,
+          password: getStoredHostPassword(),
+          hostToken: getStoredHostToken(),
+          action,
+          ...extra,
+        });
+        return;
+      }
+
+      api
+        .sendRoomCommand(roomCode, { action, ...extra })
+        .then((res) => {
+          if (res.ok && res.state) {
+            setConnStatus('connected');
+            applyIncomingRoomState(res.state);
+          }
+        })
+        .catch((err) => {
+          console.error('Erro ao enviar comando para a sala:', err);
+        });
+    },
+    [roomCode, applyIncomingRoomState]
+  );
+
+  // Connect Socket.IO (when available) + HTTP REST synchronization fallback (for Vercel Serverless)
   useEffect(() => {
+    let isDisposed = false;
+    let initialAuthChecked = false;
+    const isServerlessHost =
+      typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app');
+
+    const syncViaHttp = async () => {
+      const startedAt = Date.now();
+      try {
+        const res = await api.getRoom(roomCode);
+        if (isDisposed || !res.state) return;
+
+        const rttMs = Math.max(0, Date.now() - startedAt);
+        setOneWayLatencySec(rttMs / 2000);
+        setConnStatus('connected');
+
+        if (res.hostToken) {
+          setStoredHostToken(res.hostToken);
+        }
+
+        if (!initialAuthChecked) {
+          initialAuthChecked = true;
+          if (!res.isHost) {
+            setIsHost(false);
+            setViewMode('listener');
+            if (!initialRoute.isListenerRoute) {
+              setAuthModalOpen(true);
+            }
+          } else if (!initialRoute.isListenerRoute) {
+            setIsHost(true);
+          }
+        }
+
+        applyIncomingRoomState(res.state);
+      } catch {
+        if (!isDisposed && !socketRef.current?.connected) {
+          setConnStatus('reconnecting');
+        }
+      }
+    };
+
+    // Perform immediate HTTP fetch so room state & auth load right away
+    syncViaHttp();
+
+    // Poll every 2.5s whenever Socket.IO is not actively connected
+    const httpSyncInterval = window.setInterval(() => {
+      if (!socketRef.current?.connected) {
+        syncViaHttp();
+      }
+    }, 2500);
+
+    if (isServerlessHost) {
+      socketRef.current = null;
+      return () => {
+        isDisposed = true;
+        window.clearInterval(httpSyncInterval);
+      };
+    }
+
     const socket = io({
       path: '/socket.io',
       transports: ['websocket', 'polling'],
       reconnection: true,
-      reconnectionAttempts: Infinity,
-      reconnectionDelay: 1000,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1500,
     });
     socketRef.current = socket;
 
@@ -422,22 +525,7 @@ export const App: React.FC = () => {
             } else if (!initialRoute.isListenerRoute) {
               setIsHost(true);
             }
-            const serverElapsed = Math.max(
-              0,
-              ((res.state.serverNow || Date.now()) - res.state.updatedAt) / 1000
-            );
-            lastPacketRef.current = {
-              basePositionSec: res.state.positionSec,
-              serverElapsedSec: serverElapsed,
-              receivedPerfMs: performance.now(),
-              isPlaying: res.state.isPlaying,
-            };
-            setRoomState(res.state);
-            setListenerCount(res.state.listenerCount || 1);
-            setDisplayPositionSec(res.state.positionSec);
-            if (res.state.currentTrack?.durationSec) {
-              setDisplayDurationSec(res.state.currentTrack.durationSec);
-            }
+            applyIncomingRoomState(res.state);
           }
         }
       );
@@ -447,18 +535,6 @@ export const App: React.FC = () => {
       setConnStatus('connected');
       joinCurrentRoom();
       socket.emit('clock:ping', { clientSentAt: Date.now() });
-    });
-
-    socket.on('reconnecting', () => {
-      setConnStatus('reconnecting');
-    });
-
-    socket.on('reconnect_attempt', () => {
-      setConnStatus('reconnecting');
-    });
-
-    socket.on('disconnect', () => {
-      setConnStatus('disconnected');
     });
 
     socket.on('clock:pong', (payload: { clientSentAt: number; serverNow: number }) => {
@@ -473,27 +549,7 @@ export const App: React.FC = () => {
     });
 
     socket.on('room:state', (incoming: RoomPlaybackState) => {
-      const serverElapsed = Math.max(
-        0,
-        ((incoming.serverNow || Date.now()) - incoming.updatedAt) / 1000
-      );
-      lastPacketRef.current = {
-        basePositionSec: incoming.positionSec,
-        serverElapsedSec: serverElapsed,
-        receivedPerfMs: performance.now(),
-        isPlaying: incoming.isPlaying,
-      };
-      setRoomState((prev) => {
-        const sceneChanged = prev?.activeSceneId !== incoming.activeSceneId;
-        window.setTimeout(() => {
-          applyPlaybackStateToEngines(incoming, sceneChanged);
-        }, 0);
-        return incoming;
-      });
-      setListenerCount(incoming.listenerCount || 1);
-      if (incoming.currentTrack?.durationSec) {
-        setDisplayDurationSec(incoming.currentTrack.durationSec);
-      }
+      applyIncomingRoomState(incoming);
     });
 
     const pingInterval = window.setInterval(() => {
@@ -503,10 +559,12 @@ export const App: React.FC = () => {
     }, 10000);
 
     return () => {
+      isDisposed = true;
+      window.clearInterval(httpSyncInterval);
       window.clearInterval(pingInterval);
       socket.disconnect();
     };
-  }, [roomCode, applyPlaybackStateToEngines]);
+  }, [roomCode, applyIncomingRoomState]);
 
   // Re-apply volumes & playback whenever localVolume, localMuted, or listenerUnlocked changes
   useEffect(() => {
@@ -687,7 +745,11 @@ export const App: React.FC = () => {
         setPasswordInput('');
         setIsHost(true);
         setListenerUnlocked(true);
+        setConnStatus('connected');
         setAuthModalOpen(false);
+        if (res.state) {
+          applyIncomingRoomState(res.state);
+        }
         if (viewMode === 'listener') setViewMode('scenes');
       }
     } catch (err) {

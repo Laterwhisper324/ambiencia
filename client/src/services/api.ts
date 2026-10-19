@@ -2,6 +2,16 @@ import type { Playlist, RoomPlaybackState, SceneButton, Track } from '../types';
 
 const STORAGE_PASS_KEY = 'ambiencia_host_password';
 const STORAGE_TOKEN_KEY = 'ambiencia_host_token';
+const STORAGE_CLIENT_ID_KEY = 'ambiencia_client_id';
+
+export function getClientId(): string {
+  let id = sessionStorage.getItem(STORAGE_CLIENT_ID_KEY);
+  if (!id) {
+    id = `cli_${Math.random().toString(36).slice(2, 10)}_${Date.now().toString(36)}`;
+    sessionStorage.setItem(STORAGE_CLIENT_ID_KEY, id);
+  }
+  return id;
+}
 
 export function getStoredHostPassword(): string {
   return localStorage.getItem(STORAGE_PASS_KEY) || '';
@@ -250,8 +260,36 @@ export const api = {
     return handleResponse(res);
   },
 
-  async getRoom(code: string): Promise<{ state: RoomPlaybackState }> {
-    const res = await fetch(`/api/rooms/${encodeURIComponent(code)}`);
+  async getRoom(code: string): Promise<{
+    state: RoomPlaybackState;
+    isHost?: boolean;
+    hostToken?: string;
+  }> {
+    const clientId = getClientId();
+    const res = await fetch(
+      `/api/rooms/${encodeURIComponent(code)}?clientId=${encodeURIComponent(clientId)}`,
+      {
+        headers: authHeaders(),
+      }
+    );
+    return handleResponse(res);
+  },
+
+  async sendRoomCommand(
+    code: string,
+    payload: Record<string, unknown>
+  ): Promise<{ ok: boolean; state?: RoomPlaybackState; error?: string }> {
+    const res = await fetch(`/api/rooms/${encodeURIComponent(code)}/command`, {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        ...payload,
+        code,
+        clientId: getClientId(),
+        password: getStoredHostPassword(),
+        hostToken: getStoredHostToken(),
+      }),
+    });
     return handleResponse(res);
   },
 };

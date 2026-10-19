@@ -62,7 +62,7 @@ const apiLimiter = (0, express_rate_limit_1.default)({
 });
 exports.app.use('/api', apiLimiter);
 // Healthcheck endpoint
-exports.app.get('/api/health', (_req, res) => {
+const healthHandler = (_req, res) => {
     res.json({
         status: 'ok',
         app: 'Ambiência',
@@ -70,15 +70,21 @@ exports.app.get('/api/health', (_req, res) => {
         maxUploadMb: config_1.config.maxUploadMb,
         serverTime: Date.now(),
     });
-});
-// Mount API routes
+};
+exports.app.get('/api/health', healthHandler);
+exports.app.get('/health', healthHandler);
+// Mount API routes (both with and without /api prefix for Vercel Services compatibility)
 exports.app.use('/api/tracks', tracks_1.tracksRouter);
+exports.app.use('/tracks', tracks_1.tracksRouter);
 exports.app.use('/api/playlists', playlists_1.playlistsRouter);
+exports.app.use('/playlists', playlists_1.playlistsRouter);
 exports.app.use('/api/scenes', scenes_1.scenesRouter);
+exports.app.use('/scenes', scenes_1.scenesRouter);
 exports.app.use('/api/rooms', rooms_1.roomsRouter);
+exports.app.use('/rooms', rooms_1.roomsRouter);
 // Serve static frontend in standalone production (when client/dist exists)
 const clientDistPath = path_1.default.resolve(__dirname, '../../client/dist');
-if (fs_1.default.existsSync(clientDistPath)) {
+if (!process.env.VERCEL && fs_1.default.existsSync(clientDistPath)) {
     exports.app.use(express_1.default.static(clientDistPath));
     exports.app.get('*', (req, res, next) => {
         if (req.path.startsWith('/api') || req.path.startsWith('/socket.io')) {
@@ -88,18 +94,18 @@ if (fs_1.default.existsSync(clientDistPath)) {
         res.sendFile(path_1.default.join(clientDistPath, 'index.html'));
     });
 }
-const server = http_1.default.createServer(exports.app);
-const io = new socket_io_1.Server(server, {
-    cors: {
-        origin: '*',
-        methods: ['GET', 'POST'],
-    },
-    pingInterval: 10000,
-    pingTimeout: 8000,
-});
-(0, roomManager_1.setupSocketServer)(io);
-// Start HTTP + Socket.IO server when running as a continuous process
+// Start HTTP + Socket.IO server when running as a continuous process (local / Docker / Render / Railway)
 if (!process.env.VERCEL) {
+    const server = http_1.default.createServer(exports.app);
+    const io = new socket_io_1.Server(server, {
+        cors: {
+            origin: '*',
+            methods: ['GET', 'POST'],
+        },
+        pingInterval: 10000,
+        pingTimeout: 8000,
+    });
+    (0, roomManager_1.setupSocketServer)(io);
     seedReadyPromise.then(() => {
         server.listen(config_1.config.port, () => {
             console.log(`========================================================`);

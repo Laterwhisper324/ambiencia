@@ -3,16 +3,38 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.touchRoomClient = touchRoomClient;
 exports.computeCurrentPosition = computeCurrentPosition;
 exports.loadOrCreateRoom = loadOrCreateRoom;
 exports.createNewRoom = createNewRoom;
 exports.persistRoomState = persistRoomState;
+exports.executeHostCommand = executeHostCommand;
 exports.setupSocketServer = setupSocketServer;
 const crypto_1 = __importDefault(require("crypto"));
 const database_1 = require("../db/database");
 const auth_1 = require("../middleware/auth");
 const activeRooms = new Map();
 const roomSockets = new Map();
+const roomHttpClients = new Map();
+let ioInstance = null;
+function touchRoomClient(code, clientId) {
+    const upperCode = code.trim().toUpperCase();
+    const now = Date.now();
+    if (!roomHttpClients.has(upperCode)) {
+        roomHttpClients.set(upperCode, new Map());
+    }
+    const clientMap = roomHttpClients.get(upperCode);
+    if (clientId && clientId.trim()) {
+        clientMap.set(clientId.trim(), now);
+    }
+    for (const [id, lastSeen] of clientMap.entries()) {
+        if (now - lastSeen > 15000) {
+            clientMap.delete(id);
+        }
+    }
+    const socketCount = roomSockets.get(upperCode)?.size || 0;
+    return Math.max(socketCount, clientMap.size, clientId ? 1 : 0);
+}
 function generateShortRoomCode() {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     for (let attempt = 0; attempt < 20; attempt++) {
@@ -55,13 +77,19 @@ function loadOrCreateRoom(code, name) {
                     .map((t) => (0, database_1.getTrackById)(t.id))
                     .filter((t) => t !== null)
                 : [];
+            const fallbackPlaylist = refreshedQueue.length === 0 && parsed.activePlaylistId
+                ? (0, database_1.getPlaylistById)(parsed.activePlaylistId)
+                : null;
+            const finalQueue = refreshedQueue.length > 0
+                ? refreshedQueue
+                : fallbackPlaylist?.tracks || parsed.queue || [];
             state = {
                 ...parsed,
                 code: upperCode,
                 name: row.name,
-                currentTrack: refreshedTrack || parsed.currentTrack,
+                currentTrack: refreshedTrack || parsed.currentTrack || finalQueue[0] || null,
                 ambientTrack: refreshedAmbient || parsed.ambientTrack,
-                queue: refreshedQueue.length > 0 ? refreshedQueue : parsed.queue || [],
+                queue: finalQueue,
                 serverNow: Date.now(),
                 listenerCount: roomSockets.get(upperCode)?.size || 0,
             };
@@ -118,7 +146,231 @@ function persistRoomState(state) {
     activeRooms.set(state.code, state);
     database_1.db.prepare('UPDATE rooms SET state_json = ?, name = ? WHERE code = ?').run(JSON.stringify(state), state.name, state.code);
 }
+function executeHostCommand(payload, defaultRoomCode = 'AB12CD') {
+    const code = (payload?.code || defaultRoomCode || 'AB12CD').trim().toUpperCase();
+    if (!(0, auth_1.isValidHostAuth)(payload?.password, payload?.hostToken, code)) {
+        return {
+            ok: false,
+            error: 'Apenas o anfitrião autenticado pode controlar a reprodução da sala.',
+        };
+    }
+    const { state } = loadOrCreateRoom(code);
+    const now = Date.now();
+    switch (payload.action) {
+        case 'play': {
+            if (typeof payload.positionSec === 'number' && payload.positionSec >= 0) {
+                state.positionSec = payload.positionSec;
+            }
+            if (!state.currentTrack && state.queue.length > 0) {
+                state.currentTrack = state.queue[0];
+                state.currentIndex = 0;
+            }
+            state.isPlaying = true;
+            state.updatedAt = now;
+            break;
+        }
+        case 'pause': {
+            state.positionSec =
+                typeof payload.positionSec === 'number'
+                    ? payload.positionSec
+                    : computeCurrentPosition(state, now);
+            state.isPlaying = false;
+            state.updatedAt = now;
+            break;
+        }
+        case 'seek': {
+            state.positionSec = Math.max(0, Number(payload.positionSec) || 0);
+            state.updatedAt = now;
+            break;
+        }
+        case 'set_track': {
+            if (payload.trackId) {
+                const track = (0, database_1.getTrackById)(payload.trackId);
+                if (track) {
+                    state.currentTrack = track;
+                    const idx = state.queue.findIndex((t) => t.id === track.id);
+                    if (idx >= 0) {
+                        state.currentIndex = idx;
+                    }
+                    else {
+                        state.queue = [track, ...state.queue];
+                        state.currentIndex = 0;
+                    }
+                    state.positionSec = 0;
+                    state.isPlaying = true;
+                    state.updatedAt = now;
+                }
+            }
+            break;
+        }
+        case 'set_playlist': {
+            if (payload.playlistId) {
+                const pl = (0, database_1.getPlaylistById)(payload.playlistId);
+                if (pl) {
+                    state.activePlaylistId = pl.id;
+                    state.queue = pl.tracks;
+                    state.currentIndex = 0;
+                    state.currentTrack = pl.tracks[0] || null;
+                    state.positionSec = 0;
+                    state.isPlaying = pl.tracks.length > 0;
+                    state.updatedAt = now;
+                }
+            }
+            break;
+        }
+        case 'trigger_scene': {
+            if (payload.sceneId) {
+                const scene = (0, database_1.getSceneById)(payload.sceneId);
+                if (scene) {
+                    state.activeSceneId = scene.id;
+                    if (scene.playlistId) {
+                        const pl = (0, database_1.getPlaylistById)(scene.playlistId);
+                        if (pl) {
+                            state.activePlaylistId = pl.id;
+                            state.queue = pl.tracks;
+                            state.currentIndex = 0;
+                            state.currentTrack = pl.tracks[0] || null;
+                            state.positionSec = 0;
+                            state.isPlaying = pl.tracks.length > 0;
+                            state.updatedAt = now;
+                        }
+                    }
+                    if (scene.ambientTrackId) {
+                        const amb = (0, database_1.getTrackById)(scene.ambientTrackId);
+                        if (amb) {
+                            state.ambientTrack = amb;
+                            state.ambientIsPlaying = true;
+                            state.ambientVolume = scene.ambientVolume;
+                        }
+                    }
+                    else {
+                        state.ambientIsPlaying = false;
+                    }
+                }
+            }
+            break;
+        }
+        case 'next': {
+            if (state.queue.length > 0) {
+                if (state.repeatMode === 'track' && payload.positionSec !== undefined) {
+                    state.positionSec = 0;
+                    state.isPlaying = true;
+                    state.updatedAt = now;
+                }
+                else if (state.shuffle && state.queue.length > 1) {
+                    let nextIdx = state.currentIndex;
+                    while (nextIdx === state.currentIndex) {
+                        nextIdx = crypto_1.default.randomInt(0, state.queue.length);
+                    }
+                    state.currentIndex = nextIdx;
+                    state.currentTrack = state.queue[nextIdx];
+                    state.positionSec = 0;
+                    state.isPlaying = true;
+                    state.updatedAt = now;
+                }
+                else {
+                    const isLast = state.currentIndex >= state.queue.length - 1;
+                    if (isLast && state.repeatMode === 'none') {
+                        state.isPlaying = false;
+                        state.positionSec = 0;
+                        state.updatedAt = now;
+                    }
+                    else {
+                        state.currentIndex = (state.currentIndex + 1) % state.queue.length;
+                        state.currentTrack = state.queue[state.currentIndex];
+                        state.positionSec = 0;
+                        state.isPlaying = true;
+                        state.updatedAt = now;
+                    }
+                }
+            }
+            break;
+        }
+        case 'prev': {
+            if (state.queue.length > 0) {
+                const currentPos = computeCurrentPosition(state, now);
+                if (currentPos > 4) {
+                    state.positionSec = 0;
+                    state.updatedAt = now;
+                }
+                else {
+                    state.currentIndex =
+                        (state.currentIndex - 1 + state.queue.length) % state.queue.length;
+                    state.currentTrack = state.queue[state.currentIndex];
+                    state.positionSec = 0;
+                    state.isPlaying = true;
+                    state.updatedAt = now;
+                }
+            }
+            break;
+        }
+        case 'set_volume': {
+            if (typeof payload.volume === 'number') {
+                state.volume = Math.max(0, Math.min(1, payload.volume));
+            }
+            break;
+        }
+        case 'set_shuffle': {
+            state.shuffle =
+                typeof payload.shuffle === 'boolean' ? payload.shuffle : !state.shuffle;
+            break;
+        }
+        case 'set_repeat': {
+            if (payload.repeatMode && ['none', 'track', 'playlist'].includes(payload.repeatMode)) {
+                state.repeatMode = payload.repeatMode;
+            }
+            break;
+        }
+        case 'set_crossfade': {
+            if (typeof payload.crossfadeSec === 'number') {
+                state.crossfadeSec = Math.max(0, Math.min(10, payload.crossfadeSec));
+            }
+            break;
+        }
+        case 'set_ambient': {
+            if (payload.ambientTrackId !== undefined) {
+                if (payload.ambientTrackId === null || payload.ambientTrackId === '') {
+                    state.ambientTrack = null;
+                    state.ambientIsPlaying = false;
+                }
+                else {
+                    const amb = (0, database_1.getTrackById)(payload.ambientTrackId);
+                    if (amb) {
+                        state.ambientTrack = amb;
+                    }
+                }
+            }
+            if (typeof payload.ambientIsPlaying === 'boolean') {
+                state.ambientIsPlaying = payload.ambientIsPlaying && Boolean(state.ambientTrack);
+            }
+            if (typeof payload.ambientVolume === 'number') {
+                state.ambientVolume = Math.max(0, Math.min(1, payload.ambientVolume));
+            }
+            break;
+        }
+        case 'sync_heartbeat': {
+            if (typeof payload.positionSec === 'number' && payload.positionSec >= 0) {
+                state.positionSec = payload.positionSec;
+                state.updatedAt = now;
+            }
+            break;
+        }
+    }
+    state.listenerCount = touchRoomClient(code, payload.clientId);
+    persistRoomState(state);
+    const broadcastState = {
+        ...state,
+        positionSec: computeCurrentPosition(state, now),
+        updatedAt: now,
+        serverNow: now,
+    };
+    if (ioInstance) {
+        ioInstance.to(code).emit('room:state', broadcastState);
+    }
+    return { ok: true, state: broadcastState };
+}
 function setupSocketServer(io) {
+    ioInstance = io;
     io.on('connection', (socket) => {
         let joinedRoomCode = null;
         // NTP-style clock ping/pong for latency compensation
@@ -154,7 +406,7 @@ function setupSocketServer(io) {
             const socketSet = roomSockets.get(code);
             socketSet.add(socket.id);
             const { state, hostToken } = loadOrCreateRoom(code);
-            state.listenerCount = socketSet.size;
+            state.listenerCount = touchRoomClient(code);
             state.serverNow = Date.now();
             const isHost = (0, auth_1.isValidHostAuth)(payload?.password, payload?.hostToken, code);
             io.to(code).emit('room:listeners', {
@@ -183,230 +435,9 @@ function setupSocketServer(io) {
         });
         // Host command handler to mutate playback state and broadcast to all listeners
         socket.on('host:command', (payload, ack) => {
-            const code = (payload?.code || joinedRoomCode || 'AB12CD').trim().toUpperCase();
-            if (!(0, auth_1.isValidHostAuth)(payload?.password, payload?.hostToken, code)) {
-                if (typeof ack === 'function') {
-                    ack({
-                        ok: false,
-                        error: 'Apenas o anfitrião autenticado pode controlar a reprodução da sala.',
-                    });
-                }
-                return;
-            }
-            const { state } = loadOrCreateRoom(code);
-            const now = Date.now();
-            switch (payload.action) {
-                case 'play': {
-                    if (typeof payload.positionSec === 'number' && payload.positionSec >= 0) {
-                        state.positionSec = payload.positionSec;
-                    }
-                    if (!state.currentTrack && state.queue.length > 0) {
-                        state.currentTrack = state.queue[0];
-                        state.currentIndex = 0;
-                    }
-                    state.isPlaying = true;
-                    state.updatedAt = now;
-                    break;
-                }
-                case 'pause': {
-                    state.positionSec =
-                        typeof payload.positionSec === 'number'
-                            ? payload.positionSec
-                            : computeCurrentPosition(state, now);
-                    state.isPlaying = false;
-                    state.updatedAt = now;
-                    break;
-                }
-                case 'seek': {
-                    state.positionSec = Math.max(0, Number(payload.positionSec) || 0);
-                    state.updatedAt = now;
-                    break;
-                }
-                case 'set_track': {
-                    if (payload.trackId) {
-                        const track = (0, database_1.getTrackById)(payload.trackId);
-                        if (track) {
-                            state.currentTrack = track;
-                            const idx = state.queue.findIndex((t) => t.id === track.id);
-                            if (idx >= 0) {
-                                state.currentIndex = idx;
-                            }
-                            else {
-                                state.queue = [track, ...state.queue];
-                                state.currentIndex = 0;
-                            }
-                            state.positionSec = 0;
-                            state.isPlaying = true;
-                            state.updatedAt = now;
-                        }
-                    }
-                    break;
-                }
-                case 'set_playlist': {
-                    if (payload.playlistId) {
-                        const pl = (0, database_1.getPlaylistById)(payload.playlistId);
-                        if (pl) {
-                            state.activePlaylistId = pl.id;
-                            state.queue = pl.tracks;
-                            state.currentIndex = 0;
-                            state.currentTrack = pl.tracks[0] || null;
-                            state.positionSec = 0;
-                            state.isPlaying = pl.tracks.length > 0;
-                            state.updatedAt = now;
-                        }
-                    }
-                    break;
-                }
-                case 'trigger_scene': {
-                    if (payload.sceneId) {
-                        const scene = (0, database_1.getSceneById)(payload.sceneId);
-                        if (scene) {
-                            state.activeSceneId = scene.id;
-                            if (scene.playlistId) {
-                                const pl = (0, database_1.getPlaylistById)(scene.playlistId);
-                                if (pl) {
-                                    state.activePlaylistId = pl.id;
-                                    state.queue = pl.tracks;
-                                    state.currentIndex = 0;
-                                    state.currentTrack = pl.tracks[0] || null;
-                                    state.positionSec = 0;
-                                    state.isPlaying = pl.tracks.length > 0;
-                                    state.updatedAt = now;
-                                }
-                            }
-                            if (scene.ambientTrackId) {
-                                const amb = (0, database_1.getTrackById)(scene.ambientTrackId);
-                                if (amb) {
-                                    state.ambientTrack = amb;
-                                    state.ambientIsPlaying = true;
-                                    state.ambientVolume = scene.ambientVolume;
-                                }
-                            }
-                            else {
-                                state.ambientIsPlaying = false;
-                            }
-                        }
-                    }
-                    break;
-                }
-                case 'next': {
-                    if (state.queue.length > 0) {
-                        if (state.repeatMode === 'track' && payload.positionSec !== undefined) {
-                            // If auto-advancing on repeat track
-                            state.positionSec = 0;
-                            state.isPlaying = true;
-                            state.updatedAt = now;
-                        }
-                        else if (state.shuffle && state.queue.length > 1) {
-                            let nextIdx = state.currentIndex;
-                            while (nextIdx === state.currentIndex) {
-                                nextIdx = crypto_1.default.randomInt(0, state.queue.length);
-                            }
-                            state.currentIndex = nextIdx;
-                            state.currentTrack = state.queue[nextIdx];
-                            state.positionSec = 0;
-                            state.isPlaying = true;
-                            state.updatedAt = now;
-                        }
-                        else {
-                            const isLast = state.currentIndex >= state.queue.length - 1;
-                            if (isLast && state.repeatMode === 'none') {
-                                state.isPlaying = false;
-                                state.positionSec = 0;
-                                state.updatedAt = now;
-                            }
-                            else {
-                                state.currentIndex = (state.currentIndex + 1) % state.queue.length;
-                                state.currentTrack = state.queue[state.currentIndex];
-                                state.positionSec = 0;
-                                state.isPlaying = true;
-                                state.updatedAt = now;
-                            }
-                        }
-                    }
-                    break;
-                }
-                case 'prev': {
-                    if (state.queue.length > 0) {
-                        const currentPos = computeCurrentPosition(state, now);
-                        if (currentPos > 4) {
-                            state.positionSec = 0;
-                            state.updatedAt = now;
-                        }
-                        else {
-                            state.currentIndex =
-                                (state.currentIndex - 1 + state.queue.length) % state.queue.length;
-                            state.currentTrack = state.queue[state.currentIndex];
-                            state.positionSec = 0;
-                            state.isPlaying = true;
-                            state.updatedAt = now;
-                        }
-                    }
-                    break;
-                }
-                case 'set_volume': {
-                    if (typeof payload.volume === 'number') {
-                        state.volume = Math.max(0, Math.min(1, payload.volume));
-                    }
-                    break;
-                }
-                case 'set_shuffle': {
-                    state.shuffle =
-                        typeof payload.shuffle === 'boolean' ? payload.shuffle : !state.shuffle;
-                    break;
-                }
-                case 'set_repeat': {
-                    if (payload.repeatMode && ['none', 'track', 'playlist'].includes(payload.repeatMode)) {
-                        state.repeatMode = payload.repeatMode;
-                    }
-                    break;
-                }
-                case 'set_crossfade': {
-                    if (typeof payload.crossfadeSec === 'number') {
-                        state.crossfadeSec = Math.max(0, Math.min(10, payload.crossfadeSec));
-                    }
-                    break;
-                }
-                case 'set_ambient': {
-                    if (payload.ambientTrackId !== undefined) {
-                        if (payload.ambientTrackId === null || payload.ambientTrackId === '') {
-                            state.ambientTrack = null;
-                            state.ambientIsPlaying = false;
-                        }
-                        else {
-                            const amb = (0, database_1.getTrackById)(payload.ambientTrackId);
-                            if (amb) {
-                                state.ambientTrack = amb;
-                            }
-                        }
-                    }
-                    if (typeof payload.ambientIsPlaying === 'boolean') {
-                        state.ambientIsPlaying = payload.ambientIsPlaying && Boolean(state.ambientTrack);
-                    }
-                    if (typeof payload.ambientVolume === 'number') {
-                        state.ambientVolume = Math.max(0, Math.min(1, payload.ambientVolume));
-                    }
-                    break;
-                }
-                case 'sync_heartbeat': {
-                    if (typeof payload.positionSec === 'number' && payload.positionSec >= 0) {
-                        state.positionSec = payload.positionSec;
-                        state.updatedAt = now;
-                    }
-                    break;
-                }
-            }
-            state.listenerCount = roomSockets.get(code)?.size || 0;
-            persistRoomState(state);
-            const broadcastState = {
-                ...state,
-                positionSec: computeCurrentPosition(state, now),
-                updatedAt: now,
-                serverNow: now,
-            };
-            io.to(code).emit('room:state', broadcastState);
+            const result = executeHostCommand(payload, joinedRoomCode || 'AB12CD');
             if (typeof ack === 'function') {
-                ack({ ok: true, state: broadcastState });
+                ack(result);
             }
         });
         socket.on('disconnect', () => {
@@ -415,12 +446,13 @@ function setupSocketServer(io) {
                 if (set) {
                     set.delete(socket.id);
                     const room = activeRooms.get(joinedRoomCode);
+                    const count = touchRoomClient(joinedRoomCode);
                     if (room) {
-                        room.listenerCount = set.size;
+                        room.listenerCount = count;
                     }
                     io.to(joinedRoomCode).emit('room:listeners', {
                         code: joinedRoomCode,
-                        listenerCount: set.size,
+                        listenerCount: count,
                     });
                 }
             }

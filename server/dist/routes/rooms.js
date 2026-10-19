@@ -60,15 +60,41 @@ exports.roomsRouter.post('/', (req, res) => {
         sharePath: `/sala/${state.code}`,
     });
 });
-// GET /api/rooms/:code - Fetch room state
+// GET /api/rooms/:code - Fetch room state & record active listener heartbeat
 exports.roomsRouter.get('/:code', (req, res) => {
     const code = req.params.code.trim().toUpperCase();
-    const { state } = (0, roomManager_1.loadOrCreateRoom)(code);
+    const clientId = typeof req.query.clientId === 'string' ? req.query.clientId : undefined;
+    const password = req.headers['x-host-password'];
+    const token = req.headers['x-host-token'];
+    const { state, hostToken } = (0, roomManager_1.loadOrCreateRoom)(code);
+    const listenerCount = (0, roomManager_1.touchRoomClient)(code, clientId);
+    state.listenerCount = listenerCount;
+    const isHost = (0, auth_1.isValidHostAuth)(password, token, code);
     res.json({
         state: {
             ...state,
+            listenerCount,
             positionSec: (0, roomManager_1.computeCurrentPosition)(state),
             serverNow: Date.now(),
         },
+        isHost,
+        hostToken: isHost ? hostToken : undefined,
     });
+});
+// POST /api/rooms/:code/command - Execute host playback command via HTTP (for serverless / fallback)
+exports.roomsRouter.post('/:code/command', (req, res) => {
+    const code = req.params.code.trim().toUpperCase();
+    const password = req.headers['x-host-password'] || req.body?.password;
+    const hostToken = req.headers['x-host-token'] || req.body?.hostToken;
+    const result = (0, roomManager_1.executeHostCommand)({
+        ...req.body,
+        code,
+        password,
+        hostToken,
+    }, code);
+    if (!result.ok) {
+        res.status(401).json(result);
+        return;
+    }
+    res.json(result);
 });
