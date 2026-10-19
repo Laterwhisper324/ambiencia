@@ -15,7 +15,7 @@ roomsRouter.post('/auth', (req: Request, res: Response) => {
   if (!valid) {
     res.status(401).json({
       valid: false,
-      error: 'Senha de anfitrião incorreta. Verifique a variável HOST_PASSWORD.',
+      error: 'Senha de anfitrião incorreta.',
     });
     return;
   }

@@ -32,47 +32,92 @@ const upload = (0, multer_1.default)({
     },
     fileFilter: (_req, file, cb) => {
         const ext = path_1.default.extname(file.originalname || '').toLowerCase();
+        const allowedExts = ['.mp3', '.m4a', '.wav', '.aac', '.ogg'];
         const allowedMime = [
             'audio/mpeg',
             'audio/mp3',
             'audio/x-mp3',
             'audio/mpeg3',
+            'audio/mp4',
+            'audio/x-m4a',
+            'audio/m4a',
+            'audio/aac',
+            'audio/x-aac',
+            'video/mp4',
             'audio/wav',
             'audio/x-wav',
             'audio/wave',
+            'audio/ogg',
+            'application/ogg',
         ];
-        if (ext !== '.mp3' && ext !== '.wav') {
-            cb(new Error('Formato inválido: apenas arquivos .mp3 (ou .wav) são permitidos.'));
+        if (!allowedExts.includes(ext)) {
+            cb(new Error('Formato inválido: apenas arquivos de áudio .mp3, .m4a (ou .wav/.aac/.ogg) são permitidos.'));
             return;
         }
-        if (!allowedMime.includes(file.mimetype.toLowerCase()) && file.mimetype !== 'application/octet-stream') {
-            cb(new Error(`Tipo MIME não suportado (${file.mimetype}). Envie um arquivo MP3 válido.`));
+        if (!allowedMime.includes(file.mimetype.toLowerCase()) &&
+            file.mimetype !== 'application/octet-stream') {
+            cb(new Error(`Tipo MIME não suportado (${file.mimetype}). Envie um arquivo MP3 ou M4A válido.`));
             return;
         }
         cb(null, true);
     },
 });
 /**
- * Checks if buffer starts with valid MP3 (ID3 tag or MPEG frame sync) or RIFF WAV header.
+ * Checks if buffer starts with a valid audio signature:
+ * - MP3 (ID3v2 tag or MPEG frame sync)
+ * - M4A / MP4 ISO Base Media container ('ftyp', 'moov', 'mdat', 'styp', 'free', 'wide')
+ * - WAV ('RIFF')
+ * - Ogg ('OggS')
  */
 function hasValidAudioSignature(buf) {
-    if (buf.length < 4)
+    if (buf.length < 8)
         return false;
     // ID3v2 tag ("ID3")
     if (buf[0] === 0x49 && buf[1] === 0x44 && buf[2] === 0x33)
         return true;
-    // MPEG Audio Frame Sync (0xFF followed by 0xE0..0xFF)
+    // MPEG / AAC ADTS Audio Frame Sync (0xFF followed by 0xE0..0xFF)
     if (buf[0] === 0xff && (buf[1] & 0xe0) === 0xe0)
         return true;
     // RIFF WAVE ("RIFF")
     if (buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46)
         return true;
-    // Some MP3s have leading zero padding before frame sync
-    for (let i = 0; i < Math.min(buf.length - 2, 512); i++) {
+    // Ogg ("OggS")
+    if (buf[0] === 0x4f && buf[1] === 0x67 && buf[2] === 0x67 && buf[3] === 0x53)
+        return true;
+    // M4A / MP4 ISO Base Media File Format: box type at bytes 4..7 is 'ftyp', 'moov', 'mdat', 'styp', 'wide', or 'free'
+    const boxType = buf.subarray(4, 8).toString('ascii');
+    if (['ftyp', 'moov', 'mdat', 'styp', 'wide', 'free'].includes(boxType)) {
+        return true;
+    }
+    // Scan first 512 bytes for MPEG frame sync or 'ftyp'
+    const scanLen = Math.min(buf.length - 4, 512);
+    for (let i = 0; i < scanLen; i++) {
         if (buf[i] === 0xff && (buf[i + 1] & 0xe0) === 0xe0)
             return true;
+        if (buf[i] === 0x66 &&
+            buf[i + 1] === 0x74 &&
+            buf[i + 2] === 0x79 &&
+            buf[i + 3] === 0x70) {
+            return true;
+        }
     }
     return false;
+}
+function resolveStreamMimeType(storageKey, storedMime) {
+    const ext = path_1.default.extname(storageKey).toLowerCase();
+    if (ext === '.m4a')
+        return 'audio/mp4';
+    if (ext === '.wav')
+        return 'audio/wav';
+    if (ext === '.ogg')
+        return 'audio/ogg';
+    if (ext === '.aac')
+        return 'audio/aac';
+    if (storedMime &&
+        (storedMime.includes('m4a') || storedMime === 'video/mp4' || storedMime === 'audio/mp4')) {
+        return 'audio/mp4';
+    }
+    return storedMime || 'audio/mpeg';
 }
 // GET /api/tracks
 exports.tracksRouter.get('/', (req, res) => {
@@ -90,7 +135,8 @@ exports.tracksRouter.get('/:id/stream', async (req, res) => {
             return;
         }
         const storage = (0, StorageProvider_1.getStorageProvider)();
-        await storage.streamFile(track.storageKey, req, res, track.mimeType || 'audio/mpeg');
+        const contentType = resolveStreamMimeType(track.storageKey, track.mimeType);
+        await storage.streamFile(track.storageKey, req, res, contentType);
     }
     catch (err) {
         console.error('[Tracks] Erro ao transmitir faixa:', err);
@@ -127,17 +173,22 @@ exports.tracksRouter.post('/upload', auth_1.requireHostAuth, uploadRateLimiter, 
         }
         if (!hasValidAudioSignature(file.buffer)) {
             res.status(400).json({
-                error: 'O arquivo enviado não possui assinatura válida de áudio MP3/WAV.',
+                error: 'O arquivo enviado não possui assinatura válida de áudio (MP3, M4A ou WAV).',
             });
             return;
         }
         const safeOriginal = (0, StorageProvider_1.sanitizeFilename)(file.originalname);
+        const ext = path_1.default.extname(safeOriginal).toLowerCase();
+        const normalizedMime = ext === '.m4a' ? 'audio/mp4' : file.mimetype || 'audio/mpeg';
         const storage = (0, StorageProvider_1.getStorageProvider)();
-        const { storageKey, sizeBytes } = await storage.saveFile(file.buffer, safeOriginal, file.mimetype || 'audio/mpeg');
+        const { storageKey, sizeBytes } = await storage.saveFile(file.buffer, safeOriginal, normalizedMime);
         const rawTitle = typeof req.body.title === 'string' && req.body.title.trim()
             ? req.body.title.trim()
-            : path_1.default.basename(file.originalname, path_1.default.extname(file.originalname)).replace(/[_-]+/g, ' ');
-        let tags = ['mp3'];
+            : path_1.default
+                .basename(file.originalname, path_1.default.extname(file.originalname))
+                .replace(/[_-]+/g, ' ');
+        const defaultFormatTag = ext === '.m4a' ? 'm4a' : 'mp3';
+        let tags = [defaultFormatTag];
         if (typeof req.body.tags === 'string' && req.body.tags.trim()) {
             try {
                 const parsed = JSON.parse(req.body.tags);
@@ -151,6 +202,9 @@ exports.tracksRouter.post('/upload', auth_1.requireHostAuth, uploadRateLimiter, 
                     .filter(Boolean);
             }
         }
+        if (!tags.includes(defaultFormatTag)) {
+            tags.push(defaultFormatTag);
+        }
         const durationSec = parseFloat(req.body.durationSec) || 0;
         const isAmbient = req.body.isAmbient === 'true' || req.body.isAmbient === true;
         const id = `track-${crypto_1.default.randomUUID()}`;
@@ -160,7 +214,7 @@ exports.tracksRouter.post('/upload', auth_1.requireHostAuth, uploadRateLimiter, 
           id, title, source_type, storage_key, original_filename, mime_type,
           size_bytes, youtube_id, youtube_url, thumbnail_url, duration_sec, tags, is_ambient, created_at
         ) VALUES (?, ?, 'mp3', ?, ?, ?, ?, NULL, NULL, NULL, ?, ?, ?, ?)
-      `).run(id, rawTitle.slice(0, 140), storageKey, safeOriginal, file.mimetype || 'audio/mpeg', sizeBytes, durationSec, JSON.stringify(tags), isAmbient ? 1 : 0, now);
+      `).run(id, rawTitle.slice(0, 140), storageKey, safeOriginal, normalizedMime, sizeBytes, durationSec, JSON.stringify(tags), isAmbient ? 1 : 0, now);
         const created = (0, database_1.getTrackById)(id);
         res.status(201).json({ track: created });
     }
@@ -169,17 +223,14 @@ exports.tracksRouter.post('/upload', auth_1.requireHostAuth, uploadRateLimiter, 
         res.status(500).json({ error: 'Falha ao salvar o arquivo de áudio.' });
     }
 });
-// POST /api/tracks/youtube
+// POST /api/tracks/youtube (Supports single video links AND YouTube / YouTube Music playlist links)
 exports.tracksRouter.post('/youtube', auth_1.requireHostAuth, async (req, res) => {
     try {
-        const { url, title, tags, isAmbient } = req.body || {};
+        const { url, title, tags, isAmbient, targetPlaylistId } = req.body || {};
         if (!url || typeof url !== 'string') {
-            res.status(400).json({ error: 'Informe uma URL válida do YouTube.' });
+            res.status(400).json({ error: 'Informe uma URL válida do YouTube ou YouTube Music.' });
             return;
         }
-        const metadata = await (0, youtube_1.fetchYouTubeMetadata)(url, title);
-        const id = `track-${crypto_1.default.randomUUID()}`;
-        const now = new Date().toISOString();
         const cleanTags = Array.isArray(tags)
             ? tags.map((t) => String(t).trim()).filter(Boolean)
             : typeof tags === 'string'
@@ -191,6 +242,70 @@ exports.tracksRouter.post('/youtube', auth_1.requireHostAuth, async (req, res) =
         if (!cleanTags.includes('youtube')) {
             cleanTags.push('youtube');
         }
+        const playlistId = (0, youtube_1.extractYouTubePlaylistId)(url);
+        const directVideoId = (0, youtube_1.extractYouTubeId)(url);
+        // If URL has a playlist ID (e.g. music.youtube.com/playlist?list=... or watch?v=...&list=...)
+        if (playlistId && (!directVideoId || url.includes('/playlist') || req.body.importPlaylist !== false)) {
+            try {
+                const plResult = await (0, youtube_1.fetchYouTubePlaylistMetadata)(url, title);
+                const now = new Date().toISOString();
+                const createdTracks = [];
+                const insertTrackStmt = database_1.db.prepare(`
+          INSERT INTO tracks (
+            id, title, source_type, storage_key, original_filename, mime_type,
+            size_bytes, youtube_id, youtube_url, thumbnail_url, duration_sec, tags, is_ambient, created_at
+          ) VALUES (?, ?, 'youtube', NULL, NULL, NULL, NULL, ?, ?, ?, 0, ?, ?, ?)
+        `);
+                const newPlaylistId = typeof targetPlaylistId === 'string' && targetPlaylistId.trim()
+                    ? targetPlaylistId.trim()
+                    : `playlist-${crypto_1.default.randomUUID()}`;
+                const importTx = database_1.db.transaction(() => {
+                    // If no existing targetPlaylistId was given, create a new Playlist in Ambiência for this YouTube Music playlist
+                    const existingPl = (0, database_1.getPlaylistById)(newPlaylistId);
+                    let startPos = 0;
+                    if (!existingPl) {
+                        database_1.db.prepare(`
+              INSERT INTO playlists (id, name, description, created_at)
+              VALUES (?, ?, ?, ?)
+            `).run(newPlaylistId, plResult.playlistTitle.slice(0, 100), `Importada do YouTube / YouTube Music (${plResult.tracks.length} faixas)`, now);
+                    }
+                    else {
+                        startPos = existingPl.tracks.length;
+                    }
+                    const insertPtStmt = database_1.db.prepare(`
+            INSERT INTO playlist_tracks (playlist_id, track_id, position)
+            VALUES (?, ?, ?)
+          `);
+                    plResult.tracks.forEach((meta, idx) => {
+                        const trackId = `track-${crypto_1.default.randomUUID()}`;
+                        insertTrackStmt.run(trackId, meta.title.slice(0, 140), meta.videoId, meta.canonicalUrl, meta.thumbnailUrl, JSON.stringify(cleanTags), isAmbient ? 1 : 0, now);
+                        insertPtStmt.run(newPlaylistId, trackId, startPos + idx);
+                        const tObj = (0, database_1.getTrackById)(trackId);
+                        if (tObj)
+                            createdTracks.push(tObj);
+                    });
+                });
+                importTx();
+                const createdPlaylist = (0, database_1.getPlaylistById)(newPlaylistId);
+                res.status(201).json({
+                    track: createdTracks[0] || null,
+                    tracks: createdTracks,
+                    playlist: createdPlaylist,
+                    isPlaylistImport: true,
+                });
+                return;
+            }
+            catch (playlistErr) {
+                // If it also had a direct videoId (like watch?v=...&list=RD...), fall back to adding the single video
+                if (!directVideoId) {
+                    throw playlistErr;
+                }
+            }
+        }
+        // Single video URL
+        const metadata = await (0, youtube_1.fetchYouTubeMetadata)(url, title);
+        const id = `track-${crypto_1.default.randomUUID()}`;
+        const now = new Date().toISOString();
         database_1.db.prepare(`
       INSERT INTO tracks (
         id, title, source_type, storage_key, original_filename, mime_type,
@@ -198,10 +313,10 @@ exports.tracksRouter.post('/youtube', auth_1.requireHostAuth, async (req, res) =
       ) VALUES (?, ?, 'youtube', NULL, NULL, NULL, NULL, ?, ?, ?, 0, ?, ?, ?)
     `).run(id, metadata.title.slice(0, 140), metadata.videoId, metadata.canonicalUrl, metadata.thumbnailUrl, JSON.stringify(cleanTags), isAmbient ? 1 : 0, now);
         const created = (0, database_1.getTrackById)(id);
-        res.status(201).json({ track: created });
+        res.status(201).json({ track: created, tracks: created ? [created] : [], isPlaylistImport: false });
     }
     catch (err) {
-        const message = err instanceof Error ? err.message : 'Erro ao adicionar link do YouTube.';
+        const message = err instanceof Error ? err.message : 'Erro ao adicionar link do YouTube / YouTube Music.';
         res.status(400).json({ error: message });
     }
 });

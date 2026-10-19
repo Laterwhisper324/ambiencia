@@ -19,7 +19,8 @@ const config_1 = require("../config");
 function sanitizeFilename(rawName) {
     const base = path_1.default.basename(rawName || 'audio.mp3');
     const ext = path_1.default.extname(base).toLowerCase();
-    const safeExt = ext === '.mp3' || ext === '.wav' ? ext : '.mp3';
+    const allowedExts = ['.mp3', '.m4a', '.wav', '.aac', '.ogg'];
+    const safeExt = allowedExts.includes(ext) ? ext : '.mp3';
     const nameWithoutExt = base.slice(0, base.length - ext.length);
     const slug = nameWithoutExt
         .normalize('NFD')

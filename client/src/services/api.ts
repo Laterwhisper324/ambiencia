@@ -4,7 +4,7 @@ const STORAGE_PASS_KEY = 'ambiencia_host_password';
 const STORAGE_TOKEN_KEY = 'ambiencia_host_token';
 
 export function getStoredHostPassword(): string {
-  return localStorage.getItem(STORAGE_PASS_KEY) || 'mestre123';
+  return localStorage.getItem(STORAGE_PASS_KEY) || '';
 }
 
 export function setStoredHostPassword(pwd: string): void {
@@ -70,7 +70,13 @@ export const api = {
     title?: string;
     tags?: string[];
     isAmbient?: boolean;
-  }): Promise<{ track: Track }> {
+    targetPlaylistId?: string;
+  }): Promise<{
+    track: Track;
+    tracks?: Track[];
+    playlist?: Playlist;
+    isPlaylistImport?: boolean;
+  }> {
     const res = await fetch('/api/tracks/youtube', {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),

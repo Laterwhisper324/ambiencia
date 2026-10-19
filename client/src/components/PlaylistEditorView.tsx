@@ -39,6 +39,9 @@ export const PlaylistEditorView: React.FC<Props> = ({
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [selectedAddTrackId, setSelectedAddTrackId] = useState<string>('');
+  const [ytImportUrl, setYtImportUrl] = useState<string>('');
+  const [importingYt, setImportingYt] = useState<boolean>(false);
+  const [importError, setImportError] = useState<string | null>(null);
 
   const handleSaveHeader = async () => {
     if (!name.trim()) return;
@@ -89,6 +92,32 @@ export const PlaylistEditorView: React.FC<Props> = ({
     await api.addTrackToPlaylist(playlist.id, selectedAddTrackId);
     setSelectedAddTrackId('');
     await onRefreshData();
+  };
+
+  const handleImportYouTubeUrl = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!ytImportUrl.trim()) return;
+    setImportingYt(true);
+    setImportError(null);
+    try {
+      const res = await api.addYouTubeTrack({
+        url: ytImportUrl.trim(),
+        targetPlaylistId: playlist.id,
+      });
+      if (!res.isPlaylistImport && res.track) {
+        await api.addTrackToPlaylist(playlist.id, res.track.id);
+      }
+      setYtImportUrl('');
+      await onRefreshData();
+    } catch (err) {
+      setImportError(
+        err instanceof Error
+          ? err.message
+          : 'Erro ao importar link/playlist do YouTube Music.'
+      );
+    } finally {
+      setImportingYt(false);
+    }
   };
 
   return (
@@ -184,29 +213,58 @@ export const PlaylistEditorView: React.FC<Props> = ({
           </div>
         </div>
 
-        {/* Add track from library bar */}
-        <div className="mt-4 pt-4 border-t border-slate-800/80 flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
-          <select
-            value={selectedAddTrackId}
-            onChange={(e) => setSelectedAddTrackId(e.target.value)}
-            className="flex-1 rounded-xl border border-slate-700/80 bg-slate-900 px-3.5 py-2 text-xs text-slate-200 focus:border-amber-500 focus:outline-none"
+        {/* Add track from library or import YouTube Music link/playlist */}
+        <div className="mt-4 pt-4 border-t border-slate-800/80 space-y-2.5">
+          {importError && (
+            <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+              {importError}
+            </div>
+          )}
+
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+            <select
+              value={selectedAddTrackId}
+              onChange={(e) => setSelectedAddTrackId(e.target.value)}
+              className="flex-1 rounded-xl border border-slate-700/80 bg-slate-900 px-3.5 py-2 text-xs text-slate-200 focus:border-amber-500 focus:outline-none"
+            >
+              <option value="">+ Escolher faixa da biblioteca para adicionar nesta playlist...</option>
+              {allTracks.map((t) => (
+                <option key={t.id} value={t.id}>
+                  [{t.sourceType.toUpperCase()}] {t.title}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={handleAddTrack}
+              disabled={!selectedAddTrackId}
+              className="rounded-xl bg-slate-800 hover:bg-amber-500 hover:text-slate-950 text-slate-200 font-semibold px-4 py-2 text-xs transition inline-flex items-center justify-center gap-1.5 disabled:opacity-40"
+            >
+              <Plus className="w-4 h-4" />
+              Adicionar da Biblioteca
+            </button>
+          </div>
+
+          <form
+            onSubmit={handleImportYouTubeUrl}
+            className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5"
           >
-            <option value="">+ Escolher faixa da biblioteca para adicionar nesta playlist...</option>
-            {allTracks.map((t) => (
-              <option key={t.id} value={t.id}>
-                [{t.sourceType.toUpperCase()}] {t.title}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            onClick={handleAddTrack}
-            disabled={!selectedAddTrackId}
-            className="rounded-xl bg-slate-800 hover:bg-amber-500 hover:text-slate-950 text-slate-200 font-semibold px-4 py-2 text-xs transition inline-flex items-center justify-center gap-1.5 disabled:opacity-40"
-          >
-            <Plus className="w-4 h-4" />
-            Adicionar Faixa
-          </button>
+            <input
+              type="text"
+              value={ytImportUrl}
+              onChange={(e) => setYtImportUrl(e.target.value)}
+              placeholder="Ou cole link de faixa / playlist do YouTube ou YouTube Music (music.youtube.com/playlist?list=...)"
+              className="flex-1 rounded-xl border border-slate-700/80 bg-slate-900 px-3.5 py-2 text-xs text-slate-200 focus:border-red-500 focus:outline-none"
+            />
+            <button
+              type="submit"
+              disabled={!ytImportUrl.trim() || importingYt}
+              className="rounded-xl bg-red-500/90 hover:bg-red-500 text-white font-semibold px-4 py-2 text-xs transition inline-flex items-center justify-center gap-1.5 disabled:opacity-40"
+            >
+              <Youtube className="w-4 h-4" />
+              {importingYt ? 'Importando...' : 'Importar Link / Playlist YT'}
+            </button>
+          </form>
         </div>
       </div>
 

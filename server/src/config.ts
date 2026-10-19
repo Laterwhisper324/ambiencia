@@ -12,7 +12,7 @@ export const config = {
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean),
-  hostPassword: process.env.HOST_PASSWORD || 'mestre123',
+  hostPassword: process.env.HOST_PASSWORD || 'batatinha 123',
   databasePath: path.resolve(rootDir, process.env.DATABASE_PATH || './data/ambiencia.sqlite'),
   uploadDir: path.resolve(rootDir, process.env.UPLOAD_DIR || './uploads'),
   maxUploadMb: parseInt(process.env.MAX_UPLOAD_MB || '50', 10),

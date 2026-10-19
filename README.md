@@ -62,14 +62,14 @@ Você verá no terminal:
 🎵 Ambiência Server rodando na porta 3001
 📁 Upload Dir: ...\ambiencia\server\uploads (Provider: local)
 🗄️  SQLite DB:  ...\ambiencia\server\data\ambiencia.sqlite
-🔑 Senha Anfitrião (HOST_PASSWORD): mestre123
+🔑 Senha Anfitrião: [Protegida]
 ========================================================
 ```
 > **Importante:** Mantenha esse terminal aberto enquanto estiver usando o aplicativo.
 
 ### Passo 4: Acessar o Painel do Mestre (Anfitrião)
 - Abra no seu navegador: **`http://localhost:3001`**
-- Senha padrão do anfitrião: **`mestre123`** (configurada em `server/.env` na variável `HOST_PASSWORD`).
+- Informe a sua senha de anfitrião configurada em `server/.env` (`HOST_PASSWORD`).
 
 > **Modo Desenvolvimento (Opcional — Hot Reload):**
 > Caso esteja editando o código-fonte ao vivo, você também pode rodar em dois terminais separados:

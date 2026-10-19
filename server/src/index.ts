@@ -104,7 +104,7 @@ async function bootstrap() {
     console.log(`🎵 Ambiência Server rodando na porta ${config.port}`);
     console.log(`📁 Upload Dir: ${config.uploadDir} (Provider: ${config.storageProvider})`);
     console.log(`🗄️  SQLite DB:  ${config.databasePath}`);
-    console.log(`🔑 Senha Anfitrião (HOST_PASSWORD): ${config.hostPassword}`);
+    console.log(`🔑 Senha Anfitrião: [Protegida]`);
     console.log(`========================================================`);
   });
 }

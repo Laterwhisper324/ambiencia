@@ -5,8 +5,13 @@ exports.requireHostAuth = requireHostAuth;
 const config_1 = require("../config");
 const database_1 = require("../db/database");
 function isValidHostAuth(password, token, roomCode) {
-    if (password && password === config_1.config.hostPassword) {
-        return true;
+    if (password) {
+        const cleanInput = password.trim();
+        const cleanExpected = config_1.config.hostPassword.trim();
+        if (cleanInput === cleanExpected ||
+            cleanInput.replace(/\s+/g, '') === cleanExpected.replace(/\s+/g, '')) {
+            return true;
+        }
     }
     if (token) {
         if (roomCode) {
@@ -34,6 +39,6 @@ function requireHostAuth(req, res, next) {
         return;
     }
     res.status(401).json({
-        error: 'Acesso restrito ao anfitrião. Informe a senha do anfitrião (HOST_PASSWORD) ou token da sala válido.',
+        error: 'Acesso restrito ao anfitrião. Clique em "Sou o Anfitrião" e informe a senha.',
     });
 }

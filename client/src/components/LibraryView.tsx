@@ -111,10 +111,11 @@ export const LibraryView: React.FC<Props> = ({
     setSuccessMsg(null);
 
     const file = fileList[0];
-    const ext = file.name.split('.').pop()?.toLowerCase();
-    if (ext !== 'mp3' && ext !== 'wav') {
+    const ext = file.name.split('.').pop()?.toLowerCase() || '';
+    const allowedExts = ['mp3', 'm4a', 'wav', 'aac', 'ogg'];
+    if (!allowedExts.includes(ext)) {
       setErrorMsg(
-        `Arquivo "${file.name}" recusado: apenas arquivos de áudio .mp3 (ou .wav) são aceitos.`
+        `Arquivo "${file.name}" recusado: apenas arquivos de áudio .mp3, .m4a (ou .wav/.aac/.ogg) são aceitos.`
       );
       return;
     }
@@ -144,7 +145,7 @@ export const LibraryView: React.FC<Props> = ({
       setSuccessMsg(`Faixa "${track.title}" enviada com sucesso!`);
       if (fileInputRef.current) fileInputRef.current.value = '';
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'Erro ao enviar arquivo MP3.');
+      setErrorMsg(err instanceof Error ? err.message : 'Erro ao enviar arquivo de áudio.');
     } finally {
       setUploading(false);
     }
@@ -153,7 +154,7 @@ export const LibraryView: React.FC<Props> = ({
   const handleAddYouTube = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!ytUrl.trim()) {
-      setErrorMsg('Cole um link válido do YouTube.');
+      setErrorMsg('Cole um link válido de vídeo ou playlist do YouTube / YouTube Music.');
       return;
     }
     setErrorMsg(null);
@@ -164,7 +165,7 @@ export const LibraryView: React.FC<Props> = ({
         .split(',')
         .map((s) => s.trim())
         .filter(Boolean);
-      const { track } = await api.addYouTubeTrack({
+      const res = await api.addYouTubeTrack({
         url: ytUrl.trim(),
         title: ytCustomTitle.trim() || undefined,
         tags,
@@ -172,9 +173,15 @@ export const LibraryView: React.FC<Props> = ({
       setYtUrl('');
       setYtCustomTitle('');
       await onRefreshData();
-      setSuccessMsg(`Vídeo do YouTube "${track.title}" adicionado à biblioteca!`);
+      if (res.isPlaylistImport && res.playlist) {
+        setSuccessMsg(
+          `Playlist "${res.playlist.name}" importada com ${res.tracks?.length || 1} faixas (criada nas suas Playlists e na Biblioteca)!`
+        );
+      } else {
+        setSuccessMsg(`Faixa "${res.track.title}" adicionada à biblioteca!`);
+      }
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'Erro ao adicionar link do YouTube.');
+      setErrorMsg(err instanceof Error ? err.message : 'Erro ao adicionar link do YouTube / YouTube Music.');
     } finally {
       setAddingYt(false);
     }
@@ -278,14 +285,14 @@ export const LibraryView: React.FC<Props> = ({
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2 text-amber-400 font-semibold text-sm">
                 <Upload className="w-4 h-4" />
-                <span>Upload de Arquivo MP3</span>
+                <span>Upload de Arquivo MP3 / M4A</span>
               </div>
               <span className="text-xs font-mono text-slate-400">
                 Máx. {maxUploadMb} MB
               </span>
             </div>
             <p className="text-xs text-slate-400 mb-4">
-              Arraste e solte um arquivo <code className="text-slate-200">.mp3</code> aqui ou use o seletor. Servido via HTTP Streaming com suporte a Range requests e crossfade.
+              Arraste e solte um arquivo <code className="text-slate-200">.mp3</code> ou <code className="text-slate-200">.m4a</code> aqui ou use o seletor. Servido via HTTP Streaming com suporte a Range requests e crossfade.
             </p>
           </div>
 
@@ -312,7 +319,7 @@ export const LibraryView: React.FC<Props> = ({
             <input
               ref={fileInputRef}
               type="file"
-              accept=".mp3,audio/mpeg,audio/mp3,.wav,audio/wav"
+              accept=".mp3,.m4a,.wav,.aac,.ogg,audio/mpeg,audio/mp3,audio/mp4,audio/x-m4a,audio/m4a,audio/aac,audio/wav,audio/ogg"
               onChange={(e) => handleFilesUpload(e.target.files)}
               className="hidden"
             />
@@ -323,12 +330,12 @@ export const LibraryView: React.FC<Props> = ({
               className="w-full rounded-xl bg-amber-500/90 hover:bg-amber-400 text-slate-950 font-semibold py-2.5 text-xs transition flex items-center justify-center gap-2 disabled:opacity-50"
             >
               <Upload className="w-4 h-4" />
-              {uploading ? 'Enviando e validando áudio...' : 'Selecionar ou Soltar Arquivo MP3'}
+              {uploading ? 'Enviando e validando áudio...' : 'Selecionar ou Soltar Arquivo MP3 / M4A'}
             </button>
           </div>
         </div>
 
-        {/* YouTube Direct Link Card */}
+        {/* YouTube Direct Link / Playlist Card */}
         <form
           onSubmit={handleAddYouTube}
           className="rounded-2xl border border-slate-800 bg-[#121722]/90 p-5 flex flex-col justify-between space-y-3"
@@ -337,14 +344,14 @@ export const LibraryView: React.FC<Props> = ({
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2 text-red-400 font-semibold text-sm">
                 <Youtube className="w-4 h-4" />
-                <span>Adicionar Link do YouTube</span>
+                <span>YouTube & YouTube Music (Faixa ou Playlist)</span>
               </div>
               <span className="text-[11px] rounded-full bg-red-500/15 text-red-300 px-2.5 py-0.5 border border-red-500/30">
                 YouTube IFrame API Oficial
               </span>
             </div>
             <p className="text-xs text-slate-400 mb-3">
-              Cole a URL do vídeo. O Ambiência extrai o ID, busca título e miniatura automaticamente e reproduz via player oficial embutido sincronizado.
+              Cole o link de um vídeo ou de uma <strong>playlist do YouTube Music / YouTube</strong> (<code className="text-slate-300">music.youtube.com/playlist?list=...</code>). Se for playlist, todas as faixas e a playlist serão importadas automaticamente!
             </p>
 
             <div className="space-y-2.5">
@@ -352,7 +359,7 @@ export const LibraryView: React.FC<Props> = ({
                 type="text"
                 value={ytUrl}
                 onChange={(e) => setYtUrl(e.target.value)}
-                placeholder="https://www.youtube.com/watch?v=... ou https://youtu.be/..."
+                placeholder="https://music.youtube.com/playlist?list=... ou https://youtu.be/..."
                 className="w-full rounded-xl border border-slate-800 bg-slate-900/90 px-3.5 py-2 text-xs text-slate-100 focus:border-red-500 focus:outline-none"
               />
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -360,7 +367,7 @@ export const LibraryView: React.FC<Props> = ({
                   type="text"
                   value={ytCustomTitle}
                   onChange={(e) => setYtCustomTitle(e.target.value)}
-                  placeholder="Título opcional (auto se vazio)"
+                  placeholder="Nome da faixa/playlist (auto se vazio)"
                   className="rounded-xl border border-slate-800 bg-slate-900/90 px-3 py-1.5 text-xs text-slate-200 focus:border-red-500 focus:outline-none"
                 />
                 <input
@@ -380,7 +387,7 @@ export const LibraryView: React.FC<Props> = ({
             className="w-full rounded-xl bg-red-500/90 hover:bg-red-500 text-white font-semibold py-2.5 text-xs transition flex items-center justify-center gap-2 disabled:opacity-50"
           >
             <Plus className="w-4 h-4" />
-            {addingYt ? 'Buscando metadados do YouTube...' : 'Adicionar Vídeo à Biblioteca'}
+            {addingYt ? 'Importando do YouTube / YouTube Music...' : 'Adicionar Faixa ou Playlist'}
           </button>
         </form>
       </div>
@@ -402,7 +409,7 @@ export const LibraryView: React.FC<Props> = ({
           {(
             [
               { id: 'all', label: 'Todas' },
-              { id: 'mp3', label: 'MP3 Local' },
+              { id: 'mp3', label: 'MP3 / M4A Local' },
               { id: 'youtube', label: 'YouTube' },
               { id: 'ambient', label: '🌧️ Ambiente' },
             ] as const
@@ -528,7 +535,12 @@ export const LibraryView: React.FC<Props> = ({
                               : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
                           }`}
                         >
-                          {track.sourceType === 'youtube' ? 'YouTube' : 'MP3'}
+                          {track.sourceType === 'youtube'
+                            ? 'YouTube'
+                            : track.originalFilename?.toLowerCase().endsWith('.m4a') ||
+                              track.tags.includes('m4a')
+                            ? 'M4A'
+                            : 'MP3'}
                         </span>
                         {track.isAmbient && (
                           <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded-full border border-teal-500/30 bg-teal-500/10 text-teal-300">

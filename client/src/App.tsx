@@ -118,7 +118,7 @@ export const App: React.FC = () => {
   const [creatingPlaylist, setCreatingPlaylist] = useState<boolean>(false);
   const [copiedLink, setCopiedLink] = useState<boolean>(false);
   const [authModalOpen, setAuthModalOpen] = useState<boolean>(false);
-  const [passwordInput, setPasswordInput] = useState<string>(getStoredHostPassword());
+  const [passwordInput, setPasswordInput] = useState<string>('');
   const [authError, setAuthError] = useState<string | null>(null);
   const [joinCodeInput, setJoinCodeInput] = useState<string>(initialRoute.roomCode);
 
@@ -413,6 +413,15 @@ export const App: React.FC = () => {
         }) => {
           if (res?.ok && res.state) {
             if (res.hostToken) setStoredHostToken(res.hostToken);
+            if (!res.isHost) {
+              setIsHost(false);
+              setViewMode('listener');
+              if (!initialRoute.isListenerRoute) {
+                setAuthModalOpen(true);
+              }
+            } else if (!initialRoute.isListenerRoute) {
+              setIsHost(true);
+            }
             const serverElapsed = Math.max(
               0,
               ((res.state.serverNow || Date.now()) - res.state.updatedAt) / 1000
@@ -675,6 +684,7 @@ export const App: React.FC = () => {
       if (res.valid) {
         setStoredHostPassword(passwordInput);
         if (res.hostToken) setStoredHostToken(res.hostToken);
+        setPasswordInput('');
         setIsHost(true);
         setListenerUnlocked(true);
         setAuthModalOpen(false);
@@ -1760,7 +1770,7 @@ export const App: React.FC = () => {
             </div>
 
             <p className="text-xs text-slate-400">
-              Informe a senha configurada em <code className="text-amber-300">HOST_PASSWORD</code> (padrão local: <code className="text-slate-200">mestre123</code>) para controlar a música e editar cenas.
+              Digite a senha do anfitrião para desbloquear os controles de reprodução e edição.
             </p>
 
             {authError && (
