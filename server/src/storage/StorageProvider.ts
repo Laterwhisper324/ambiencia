@@ -2,6 +2,14 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import type { Request, Response } from 'express';
+import {
+  S3Client,
+  PutObjectCommand,
+  DeleteObjectCommand,
+  GetObjectCommand,
+  HeadObjectCommand,
+} from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { config } from '../config';
 
 /**
@@ -179,22 +187,14 @@ export class LocalDiskStorageProvider implements StorageProvider {
  * Activated by setting STORAGE_PROVIDER=s3 in environment variables.
  */
 export class S3StorageProvider implements StorageProvider {
-  private readonly client: any;
-  private readonly s3Mod: any;
-  private readonly presignerMod: any;
+  private readonly client: S3Client;
   private readonly bucket: string;
   private readonly publicBaseUrl: string;
 
   constructor() {
-    const dynReq = typeof require !== 'undefined' ? require : null;
-    if (!dynReq) {
-      throw new Error('S3StorageProvider requer suporte a CommonJS require.');
-    }
-    this.s3Mod = dynReq('@aws-sdk/client-s3');
-    this.presignerMod = dynReq('@aws-sdk/s3-request-presigner');
     this.bucket = config.s3.bucket;
     this.publicBaseUrl = config.s3.publicBaseUrl.replace(/\/$/, '');
-    this.client = new this.s3Mod.S3Client({
+    this.client = new S3Client({
       region: config.s3.region || 'auto',
       endpoint: config.s3.endpoint || undefined,
       credentials: {
@@ -216,7 +216,7 @@ export class S3StorageProvider implements StorageProvider {
       : `${crypto.randomUUID()}-${safeName}`;
 
     await this.client.send(
-      new this.s3Mod.PutObjectCommand({
+      new PutObjectCommand({
         Bucket: this.bucket,
         Key: storageKey,
         Body: buffer,
@@ -234,7 +234,7 @@ export class S3StorageProvider implements StorageProvider {
     try {
       const cleanKey = sanitizeFilename(storageKey);
       await this.client.send(
-        new this.s3Mod.DeleteObjectCommand({
+        new DeleteObjectCommand({
           Bucket: this.bucket,
           Key: cleanKey,
         })
@@ -248,7 +248,7 @@ export class S3StorageProvider implements StorageProvider {
     try {
       const cleanKey = sanitizeFilename(storageKey);
       await this.client.send(
-        new this.s3Mod.HeadObjectCommand({
+        new HeadObjectCommand({
           Bucket: this.bucket,
           Key: cleanKey,
         })
@@ -271,11 +271,11 @@ export class S3StorageProvider implements StorageProvider {
       return;
     }
 
-    const command = new this.s3Mod.GetObjectCommand({
+    const command = new GetObjectCommand({
       Bucket: this.bucket,
       Key: cleanKey,
     });
-    const signedUrl = await this.presignerMod.getSignedUrl(this.client, command, {
+    const signedUrl = await getSignedUrl(this.client, command, {
       expiresIn: 3600,
     });
     res.redirect(302, signedUrl);

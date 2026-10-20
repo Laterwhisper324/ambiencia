@@ -450,26 +450,11 @@ function createDatabaseConnection(): DatabaseLike {
     return new JsonFallbackDatabase(config.databasePath);
   }
 
-  const dynamicRequire: ((id: string) => any) | null =
-    typeof require !== 'undefined' ? require : null;
-
-  // Tier 1: Try better-sqlite3
-  if (dynamicRequire) {
-    try {
-      const BetterSqlite3 = dynamicRequire('better-sqlite3');
-      const instance = new BetterSqlite3(config.databasePath) as DatabaseLike;
-      instance.pragma('journal_mode = WAL');
-      instance.pragma('foreign_keys = ON');
-      console.log('[DB] Conectado via better-sqlite3');
-      return instance;
-    } catch {
-      console.warn('[DB] better-sqlite3 indisponível neste ambiente, tentando node:sqlite...');
-    }
-
-    // Tier 2: Try Node.js built-in node:sqlite (Node 22.5+ / 24+)
-    try {
-      const { DatabaseSync } = dynamicRequire('node:sqlite');
-      const rawDb = new DatabaseSync(config.databasePath);
+  // Try Node.js built-in node:sqlite via process.getBuiltinModule (Node 22.5+ / 24+) without CJS require
+  try {
+    const sqliteBuiltin = (process as any).getBuiltinModule?.('node:sqlite');
+    if (sqliteBuiltin && sqliteBuiltin.DatabaseSync) {
+      const rawDb = new sqliteBuiltin.DatabaseSync(config.databasePath);
       const wrapped: DatabaseLike = {
         exec: (sql: string) => rawDb.exec(sql),
         pragma: (str: string) => rawDb.exec(`PRAGMA ${str}`),
@@ -491,12 +476,12 @@ function createDatabaseConnection(): DatabaseLike {
       wrapped.pragma('foreign_keys = ON');
       console.log('[DB] Conectado via node:sqlite (DatabaseSync nativo)');
       return wrapped;
-    } catch {
-      console.warn('[DB] node:sqlite indisponível, ativando JsonFallbackDatabase em:', config.databasePath);
     }
+  } catch {
+    console.warn('[DB] node:sqlite indisponível, ativando JsonFallbackDatabase em:', config.databasePath);
   }
 
-  // Tier 3: Pure-JS JSON store fallback (guaranteed to work on any serverless runtime)
+  // Pure-JS JSON store fallback (guaranteed to work on any runtime)
   return new JsonFallbackDatabase(config.databasePath);
 }
 

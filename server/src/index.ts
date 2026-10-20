@@ -5,6 +5,7 @@ import fs from 'fs';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import { Server as SocketIOServer } from 'socket.io';
 import { config } from './config';
 import { ensureSeedData } from './db/seed';
 import { tracksRouter } from './routes/tracks';
@@ -87,8 +88,8 @@ app.use('/api/rooms', roomsRouter);
 app.use('/rooms', roomsRouter);
 
 // Serve static frontend in standalone production (when client/dist exists)
-if (!process.env.VERCEL && typeof __dirname !== 'undefined') {
-  const clientDistPath = path.resolve(__dirname, '../../client/dist');
+if (!process.env.VERCEL) {
+  const clientDistPath = path.resolve(process.cwd(), '../client/dist');
   if (fs.existsSync(clientDistPath)) {
     app.use(express.static(clientDistPath));
     app.get('*', (req, res, next) => {
@@ -120,35 +121,28 @@ app.use(
 
 // Start HTTP + Socket.IO server when running as a continuous process (local / Docker / Render / Railway)
 if (!process.env.VERCEL) {
-  const dynReq = typeof require !== 'undefined' ? require : null;
-  if (dynReq) {
-    const server = http.createServer(app);
-    const { Server: SocketIOServer } = dynReq('socket.io');
-    const io = new SocketIOServer(server, {
-      cors: {
-        origin: '*',
-        methods: ['GET', 'POST'],
-      },
-      pingInterval: 10000,
-      pingTimeout: 8000,
-    });
+  const server = http.createServer(app);
+  const io = new SocketIOServer(server, {
+    cors: {
+      origin: '*',
+      methods: ['GET', 'POST'],
+    },
+    pingInterval: 10000,
+    pingTimeout: 8000,
+  });
 
-    setupSocketServer(io);
+  setupSocketServer(io);
 
-    seedReadyPromise.then(() => {
-      server.listen(config.port, () => {
-        console.log(`========================================================`);
-        console.log(`🎵 Ambiência Server rodando na porta ${config.port}`);
-        console.log(`📁 Upload Dir: ${config.uploadDir} (Provider: ${config.storageProvider})`);
-        console.log(`🗄️  SQLite DB:  ${config.databasePath}`);
-        console.log(`🔑 Senha Anfitrião: [Protegida]`);
-        console.log(`========================================================`);
-      });
+  seedReadyPromise.then(() => {
+    server.listen(config.port, () => {
+      console.log(`========================================================`);
+      console.log(`🎵 Ambiência Server rodando na porta ${config.port}`);
+      console.log(`📁 Upload Dir: ${config.uploadDir} (Provider: ${config.storageProvider})`);
+      console.log(`🗄️  SQLite DB:  ${config.databasePath}`);
+      console.log(`🔑 Senha Anfitrião: [Protegida]`);
+      console.log(`========================================================`);
     });
-  }
+  });
 }
-
-(app as any).default = app;
-(app as any).app = app;
 
 export default app;

@@ -230,14 +230,3 @@ async function ensureSeedData() {
   `).run('AB12CD', defaultState.name, 'default-host-token-ab12cd', JSON.stringify(defaultState), now);
     console.log('[Seed] Dados iniciais criados com sucesso (Sala padrão: AB12CD).');
 }
-if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.main === module) {
-    ensureSeedData()
-        .then(() => {
-        console.log('Seed finalizado.');
-        process.exit(0);
-    })
-        .catch((err) => {
-        console.error('Erro no seed:', err);
-        process.exit(1);
-    });
-}

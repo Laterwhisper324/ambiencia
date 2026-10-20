@@ -1,13 +1,12 @@
 {
   "name": "ambiencia-server",
   "version": "1.0.0",
-  "type": "commonjs",
   "description": "Backend Node.js + Express + Socket.IO + SQLite para o player colaborativo Ambiência",
-  "main": "index.js",
+  "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "node ./node_modules/typescript/bin/tsc && node ../client/node_modules/esbuild/bin/esbuild src/index.ts --bundle --platform=node --format=cjs --footer:js=\"if(module.exports&&module.exports.default){const f=module.exports.default;f.default=f;f.app=f;module.exports=f;}\" --outfile=index.js",
-    "start": "node index.js",
+    "build": "node ./node_modules/typescript/bin/tsc",
+    "start": "node dist/index.js",
     "seed": "tsx src/db/seed.ts"
   },
   "dependencies": {

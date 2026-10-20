@@ -332,15 +332,3 @@ export async function ensureSeedData(): Promise<void> {
 
   console.log('[Seed] Dados iniciais criados com sucesso (Sala padrão: AB12CD).');
 }
-
-if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.main === module) {
-  ensureSeedData()
-    .then(() => {
-      console.log('Seed finalizado.');
-      process.exit(0);
-    })
-    .catch((err) => {
-      console.error('Erro no seed:', err);
-      process.exit(1);
-    });
-}

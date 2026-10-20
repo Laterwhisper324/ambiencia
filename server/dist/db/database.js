@@ -336,24 +336,11 @@ function createDatabaseConnection() {
         console.log('[DB] Ambiente Vercel detectado: usando JsonFallbackDatabase em', config_1.config.databasePath);
         return new JsonFallbackDatabase(config_1.config.databasePath);
     }
-    const dynamicRequire = typeof require !== 'undefined' ? require : null;
-    // Tier 1: Try better-sqlite3
-    if (dynamicRequire) {
-        try {
-            const BetterSqlite3 = dynamicRequire('better-sqlite3');
-            const instance = new BetterSqlite3(config_1.config.databasePath);
-            instance.pragma('journal_mode = WAL');
-            instance.pragma('foreign_keys = ON');
-            console.log('[DB] Conectado via better-sqlite3');
-            return instance;
-        }
-        catch {
-            console.warn('[DB] better-sqlite3 indisponível neste ambiente, tentando node:sqlite...');
-        }
-        // Tier 2: Try Node.js built-in node:sqlite (Node 22.5+ / 24+)
-        try {
-            const { DatabaseSync } = dynamicRequire('node:sqlite');
-            const rawDb = new DatabaseSync(config_1.config.databasePath);
+    // Try Node.js built-in node:sqlite via process.getBuiltinModule (Node 22.5+ / 24+) without CJS require
+    try {
+        const sqliteBuiltin = process.getBuiltinModule?.('node:sqlite');
+        if (sqliteBuiltin && sqliteBuiltin.DatabaseSync) {
+            const rawDb = new sqliteBuiltin.DatabaseSync(config_1.config.databasePath);
             const wrapped = {
                 exec: (sql) => rawDb.exec(sql),
                 pragma: (str) => rawDb.exec(`PRAGMA ${str}`),
@@ -376,11 +363,11 @@ function createDatabaseConnection() {
             console.log('[DB] Conectado via node:sqlite (DatabaseSync nativo)');
             return wrapped;
         }
-        catch {
-            console.warn('[DB] node:sqlite indisponível, ativando JsonFallbackDatabase em:', config_1.config.databasePath);
-        }
     }
-    // Tier 3: Pure-JS JSON store fallback (guaranteed to work on any serverless runtime)
+    catch {
+        console.warn('[DB] node:sqlite indisponível, ativando JsonFallbackDatabase em:', config_1.config.databasePath);
+    }
+    // Pure-JS JSON store fallback (guaranteed to work on any runtime)
     return new JsonFallbackDatabase(config_1.config.databasePath);
 }
 exports.db = createDatabaseConnection();
