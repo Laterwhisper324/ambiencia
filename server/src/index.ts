@@ -88,17 +88,36 @@ app.use('/api/rooms', roomsRouter);
 app.use('/rooms', roomsRouter);
 
 // Serve static frontend in standalone production (when client/dist exists)
-const clientDistPath = path.resolve(__dirname, '../../client/dist');
-if (!process.env.VERCEL && fs.existsSync(clientDistPath)) {
-  app.use(express.static(clientDistPath));
-  app.get('*', (req, res, next) => {
-    if (req.path.startsWith('/api') || req.path.startsWith('/socket.io')) {
-      next();
-      return;
-    }
-    res.sendFile(path.join(clientDistPath, 'index.html'));
-  });
+if (!process.env.VERCEL && typeof __dirname !== 'undefined') {
+  const clientDistPath = path.resolve(__dirname, '../../client/dist');
+  if (fs.existsSync(clientDistPath)) {
+    app.use(express.static(clientDistPath));
+    app.get('*', (req, res, next) => {
+      if (req.path.startsWith('/api') || req.path.startsWith('/socket.io')) {
+        next();
+        return;
+      }
+      res.sendFile(path.join(clientDistPath, 'index.html'));
+    });
+  }
 }
+
+// Global error boundary to prevent unhandled serverless invocation crashes
+app.use(
+  (
+    err: unknown,
+    _req: express.Request,
+    res: express.Response,
+    _next: express.NextFunction
+  ) => {
+    console.error('[Server Error]:', err);
+    if (!res.headersSent) {
+      res.status(500).json({
+        error: err instanceof Error ? err.message : 'Erro interno do servidor.',
+      });
+    }
+  }
+);
 
 // Start HTTP + Socket.IO server when running as a continuous process (local / Docker / Render / Railway)
 if (!process.env.VERCEL) {

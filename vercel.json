@@ -4,6 +4,7 @@
     "client": {
       "root": "client",
       "framework": "vite",
+      "installCommand": "npm install",
       "buildCommand": "npm run build",
       "bindings": [
         {
@@ -17,7 +18,8 @@
     "server": {
       "root": "server",
       "framework": "express",
-      "entrypoint": "src/index.ts"
+      "entrypoint": "src/index.ts",
+      "installCommand": "npm install"
     }
   },
   "rewrites": [

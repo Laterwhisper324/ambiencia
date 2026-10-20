@@ -3,12 +3,28 @@
   "version": "1.0.0",
   "private": true,
   "description": "Ambiência — Player de trilhas sonoras por cenas para RPG, streams e eventos com sincronização em tempo real",
+  "workspaces": [
+    "client",
+    "server"
+  ],
   "scripts": {
-    "install:all": "npm --prefix server install && npm --prefix server rebuild better-sqlite3 esbuild && npm --prefix client install && npm --prefix client rebuild esbuild",
+    "install:all": "npm --prefix server install && npm --prefix client install",
     "dev:server": "npm --prefix server run dev",
     "dev:client": "npm --prefix client run dev",
     "build": "npm --prefix client run build && npm --prefix server run build",
     "start": "npm --prefix server run start",
     "seed": "npm --prefix server run seed"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.700.0",
+    "@aws-sdk/s3-request-presigner": "^3.700.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^8.0.0",
+    "multer": "^1.4.5-lts.1",
+    "socket.io": "^4.8.1",
+    "zod": "^3.24.1"
   }
 }

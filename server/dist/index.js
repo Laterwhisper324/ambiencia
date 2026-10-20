@@ -83,17 +83,28 @@ exports.app.use('/scenes', scenes_1.scenesRouter);
 exports.app.use('/api/rooms', rooms_1.roomsRouter);
 exports.app.use('/rooms', rooms_1.roomsRouter);
 // Serve static frontend in standalone production (when client/dist exists)
-const clientDistPath = path_1.default.resolve(__dirname, '../../client/dist');
-if (!process.env.VERCEL && fs_1.default.existsSync(clientDistPath)) {
-    exports.app.use(express_1.default.static(clientDistPath));
-    exports.app.get('*', (req, res, next) => {
-        if (req.path.startsWith('/api') || req.path.startsWith('/socket.io')) {
-            next();
-            return;
-        }
-        res.sendFile(path_1.default.join(clientDistPath, 'index.html'));
-    });
+if (!process.env.VERCEL && typeof __dirname !== 'undefined') {
+    const clientDistPath = path_1.default.resolve(__dirname, '../../client/dist');
+    if (fs_1.default.existsSync(clientDistPath)) {
+        exports.app.use(express_1.default.static(clientDistPath));
+        exports.app.get('*', (req, res, next) => {
+            if (req.path.startsWith('/api') || req.path.startsWith('/socket.io')) {
+                next();
+                return;
+            }
+            res.sendFile(path_1.default.join(clientDistPath, 'index.html'));
+        });
+    }
 }
+// Global error boundary to prevent unhandled serverless invocation crashes
+exports.app.use((err, _req, res, _next) => {
+    console.error('[Server Error]:', err);
+    if (!res.headersSent) {
+        res.status(500).json({
+            error: err instanceof Error ? err.message : 'Erro interno do servidor.',
+        });
+    }
+});
 // Start HTTP + Socket.IO server when running as a continuous process (local / Docker / Render / Railway)
 if (!process.env.VERCEL) {
     const server = http_1.default.createServer(exports.app);
