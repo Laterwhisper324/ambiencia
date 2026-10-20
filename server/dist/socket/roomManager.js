@@ -146,7 +146,7 @@ function persistRoomState(state) {
     activeRooms.set(state.code, state);
     database_1.db.prepare('UPDATE rooms SET state_json = ?, name = ? WHERE code = ?').run(JSON.stringify(state), state.name, state.code);
 }
-function executeHostCommand(payload, defaultRoomCode = 'AB12CD') {
+function executeHostCommand(payload, defaultRoomCode = 'AB12CD', senderSocketId) {
     const code = (payload?.code || defaultRoomCode || 'AB12CD').trim().toUpperCase();
     if (!(0, auth_1.isValidHostAuth)(payload?.password, payload?.hostToken, code)) {
         return {
@@ -365,7 +365,12 @@ function executeHostCommand(payload, defaultRoomCode = 'AB12CD') {
         serverNow: now,
     };
     if (ioInstance) {
-        ioInstance.to(code).emit('room:state', broadcastState);
+        if (payload.action === 'sync_heartbeat' && senderSocketId) {
+            ioInstance.to(code).except(senderSocketId).emit('room:state', broadcastState);
+        }
+        else {
+            ioInstance.to(code).emit('room:state', broadcastState);
+        }
     }
     return { ok: true, state: broadcastState };
 }
@@ -435,7 +440,7 @@ function setupSocketServer(io) {
         });
         // Host command handler to mutate playback state and broadcast to all listeners
         socket.on('host:command', (payload, ack) => {
-            const result = executeHostCommand(payload, joinedRoomCode || 'AB12CD');
+            const result = executeHostCommand(payload, joinedRoomCode || 'AB12CD', socket.id);
             if (typeof ack === 'function') {
                 ack(result);
             }

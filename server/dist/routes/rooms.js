@@ -18,14 +18,16 @@ exports.roomsRouter.post('/auth', (req, res) => {
     }
     const roomCode = typeof code === 'string' && code.trim() ? code.trim().toUpperCase() : 'AB12CD';
     const { state, hostToken: roomToken } = (0, roomManager_1.loadOrCreateRoom)(roomCode);
+    const now = Date.now();
     res.json({
         valid: true,
         roomCode: state.code,
         hostToken: roomToken,
         state: {
             ...state,
-            positionSec: (0, roomManager_1.computeCurrentPosition)(state),
-            serverNow: Date.now(),
+            positionSec: (0, roomManager_1.computeCurrentPosition)(state, now),
+            updatedAt: now,
+            serverNow: now,
         },
     });
 });
@@ -70,12 +72,14 @@ exports.roomsRouter.get('/:code', (req, res) => {
     const listenerCount = (0, roomManager_1.touchRoomClient)(code, clientId);
     state.listenerCount = listenerCount;
     const isHost = (0, auth_1.isValidHostAuth)(password, token, code);
+    const now = Date.now();
     res.json({
         state: {
             ...state,
             listenerCount,
-            positionSec: (0, roomManager_1.computeCurrentPosition)(state),
-            serverNow: Date.now(),
+            positionSec: (0, roomManager_1.computeCurrentPosition)(state, now),
+            updatedAt: now,
+            serverNow: now,
         },
         isHost,
         hostToken: isHost ? hostToken : undefined,

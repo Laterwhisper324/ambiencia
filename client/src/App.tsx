@@ -137,14 +137,25 @@ export const App: React.FC = () => {
 
   // Socket & Clock sync refs
   const socketRef = useRef<Socket | null>(null);
+  const oneWayLatencySecRef = useRef<number>(0);
+  const isHostRef = useRef<boolean>(isHost);
+  const roomStateRef = useRef<RoomPlaybackState | null>(roomState);
+  const lastDriftCorrectionRef = useRef<number>(0);
+
+  useEffect(() => {
+    isHostRef.current = isHost;
+  }, [isHost]);
+
+  useEffect(() => {
+    roomStateRef.current = roomState;
+  }, [roomState]);
+
   const lastPacketRef = useRef<{
     basePositionSec: number;
-    serverElapsedSec: number;
     receivedPerfMs: number;
     isPlaying: boolean;
   }>({
     basePositionSec: 0,
-    serverElapsedSec: 0,
     receivedPerfMs: performance.now(),
     isPlaying: false,
   });
@@ -173,14 +184,15 @@ export const App: React.FC = () => {
   }, [refreshCatalog]);
 
   // Helper to compute target synchronized playback position in seconds
+  // Uses oneWayLatencySecRef so latency updates never recreate callbacks or tear down Socket.IO/HTTP timers
   const getExpectedPositionSec = useCallback((): number => {
     const pkt = lastPacketRef.current;
     if (!pkt.isPlaying) {
       return pkt.basePositionSec;
     }
     const clientElapsedSec = Math.max(0, (performance.now() - pkt.receivedPerfMs) / 1000);
-    return pkt.basePositionSec + pkt.serverElapsedSec + oneWayLatencySec + clientElapsedSec;
-  }, [oneWayLatencySec]);
+    return pkt.basePositionSec + oneWayLatencySecRef.current + clientElapsedSec;
+  }, []);
 
   // Calculate effective volume combining room master volume and listener local volume
   const getEffectiveMusicVolume = useCallback(
@@ -203,7 +215,7 @@ export const App: React.FC = () => {
 
   // Apply room state to Dual-Deck MP3 Engine, YouTube IFrame Player, and Ambient Loop Deck
   const applyPlaybackStateToEngines = useCallback(
-    (state: RoomPlaybackState, forceFadeTransition = false) => {
+    (state: RoomPlaybackState, forceFadeTransition = false, allowHostSeek = false) => {
       if (!listenerUnlocked) return;
 
       const deckA = deckARef.current;
@@ -227,8 +239,10 @@ export const App: React.FC = () => {
             ambAudio.loop = true;
           }
           if (state.ambientIsPlaying) {
-            ambAudio.play().catch(() => {});
-          } else {
+            if (ambAudio.paused) {
+              ambAudio.play().catch(() => {});
+            }
+          } else if (!ambAudio.paused) {
             ambAudio.pause();
           }
         } else {
@@ -255,7 +269,9 @@ export const App: React.FC = () => {
         activeTrackIdRef.current = track.id;
 
         ytPlayerRef.current?.setVolume(targetVol);
-        ytPlayerRef.current?.loadVideo(track.youtubeId, expectedPos, state.isPlaying);
+        // Never force-seek the Host's already-playing YouTube video unless trackChanged or explicit seek
+        const ytTargetSec = trackChanged || allowHostSeek || !isHostRef.current ? expectedPos : -1;
+        ytPlayerRef.current?.loadVideo(track.youtubeId, ytTargetSec, state.isPlaying);
         return;
       }
 
@@ -319,7 +335,7 @@ export const App: React.FC = () => {
           currentDeck.src = `/api/tracks/${track.id}/stream`;
           currentDeck.volume = targetVol;
           currentDeck.onloadedmetadata = () => {
-            if (expectedPos > 0 && Math.abs(currentDeck.currentTime - expectedPos) > 1.0) {
+            if (expectedPos > 0 && Math.abs(currentDeck.currentTime - expectedPos) > 1.5) {
               currentDeck.currentTime = expectedPos;
             }
           };
@@ -330,14 +346,22 @@ export const App: React.FC = () => {
           }
         }
       } else {
-        // Same MP3 track: update volume, play/pause, and check drift (> 1.0s)
+        // Same MP3 track: update volume, play/pause, and only seek on explicit host seek or listener drift > 2.5s
         if (!fadeTimerRef.current) {
           currentDeck.volume = targetVol;
         }
         const drift = Math.abs(currentDeck.currentTime - expectedPos);
-        if (drift > 1.0 && currentDeck.readyState >= 1) {
+        const nowMs = Date.now();
+        if (
+          currentDeck.readyState >= 1 &&
+          (allowHostSeek ||
+            (!isHostRef.current &&
+              drift > 2.5 &&
+              nowMs - lastDriftCorrectionRef.current > 4000))
+        ) {
           currentDeck.currentTime = expectedPos;
-          setLastDriftFixedMs(Date.now());
+          lastDriftCorrectionRef.current = nowMs;
+          setLastDriftFixedMs(nowMs);
         }
         if (state.isPlaying && currentDeck.paused) {
           currentDeck.play().catch(() => {});
@@ -356,26 +380,21 @@ export const App: React.FC = () => {
 
   // Unified handler to ingest RoomPlaybackState from either Socket.IO or HTTP REST
   const applyIncomingRoomState = useCallback(
-    (incoming: RoomPlaybackState) => {
-      const serverElapsed = Math.max(
-        0,
-        ((incoming.serverNow || Date.now()) - incoming.updatedAt) / 1000
-      );
+    (incoming: RoomPlaybackState, allowHostSeek = false) => {
       lastPacketRef.current = {
         basePositionSec: incoming.positionSec,
-        serverElapsedSec: serverElapsed,
         receivedPerfMs: performance.now(),
         isPlaying: incoming.isPlaying,
       };
       setRoomState((prev) => {
         const sceneChanged = prev?.activeSceneId !== incoming.activeSceneId;
         window.setTimeout(() => {
-          applyPlaybackStateToEngines(incoming, sceneChanged);
+          applyPlaybackStateToEngines(incoming, sceneChanged, allowHostSeek);
         }, 0);
         return incoming;
       });
       setListenerCount(incoming.listenerCount || 1);
-      if (!incoming.isPlaying) {
+      if (!incoming.isPlaying || allowHostSeek) {
         setDisplayPositionSec(incoming.positionSec);
       }
       if (incoming.currentTrack?.durationSec) {
@@ -405,6 +424,29 @@ export const App: React.FC = () => {
         | 'sync_heartbeat',
       extra: Record<string, unknown> = {}
     ) => {
+      const isExplicitSeek = action === 'seek';
+
+      // Immediately apply seek locally on the Host so the progress bar and audio respond with zero lag
+      if (isExplicitSeek && typeof extra.positionSec === 'number') {
+        const targetSec = Math.max(0, extra.positionSec);
+        setDisplayPositionSec(targetSec);
+        lastPacketRef.current = {
+          basePositionSec: targetSec,
+          receivedPerfMs: performance.now(),
+          isPlaying: roomStateRef.current?.isPlaying ?? false,
+        };
+        const currentTrack = roomStateRef.current?.currentTrack;
+        if (currentTrack?.sourceType === 'mp3') {
+          const activeDeck =
+            activeDeckRef.current === 'A' ? deckARef.current : deckBRef.current;
+          if (activeDeck && activeDeck.readyState >= 1) {
+            activeDeck.currentTime = targetSec;
+          }
+        } else if (currentTrack?.sourceType === 'youtube') {
+          ytPlayerRef.current?.seekTo(targetSec);
+        }
+      }
+
       if (socketRef.current?.connected) {
         socketRef.current.emit('host:command', {
           code: roomCode,
@@ -421,7 +463,10 @@ export const App: React.FC = () => {
         .then((res) => {
           if (res.ok && res.state) {
             setConnStatus('connected');
-            applyIncomingRoomState(res.state);
+            // Ignore delayed heartbeat echo on the Host to prevent audio micro-jumps
+            if (action !== 'sync_heartbeat') {
+              applyIncomingRoomState(res.state, isExplicitSeek);
+            }
           }
         })
         .catch((err) => {
@@ -445,6 +490,7 @@ export const App: React.FC = () => {
         if (isDisposed || !res.state) return;
 
         const rttMs = Math.max(0, Date.now() - startedAt);
+        oneWayLatencySecRef.current = rttMs / 2000;
         setOneWayLatencySec(rttMs / 2000);
         setConnStatus('connected');
 
@@ -452,7 +498,8 @@ export const App: React.FC = () => {
           setStoredHostToken(res.hostToken);
         }
 
-        if (!initialAuthChecked) {
+        const wasInitial = !initialAuthChecked;
+        if (wasInitial) {
           initialAuthChecked = true;
           if (!res.isHost) {
             setIsHost(false);
@@ -465,7 +512,13 @@ export const App: React.FC = () => {
           }
         }
 
-        applyIncomingRoomState(res.state);
+        // If this client is the active Host and already has roomState loaded, only update listenerCount on background polls
+        if (!wasInitial && isHostRef.current && roomStateRef.current) {
+          setListenerCount(res.state.listenerCount || 1);
+          return;
+        }
+
+        applyIncomingRoomState(res.state, false);
       } catch {
         if (!isDisposed && !socketRef.current?.connected) {
           setConnStatus('reconnecting');
@@ -525,7 +578,7 @@ export const App: React.FC = () => {
             } else if (!initialRoute.isListenerRoute) {
               setIsHost(true);
             }
-            applyIncomingRoomState(res.state);
+            applyIncomingRoomState(res.state, false);
           }
         }
       );
@@ -539,6 +592,7 @@ export const App: React.FC = () => {
 
     socket.on('clock:pong', (payload: { clientSentAt: number; serverNow: number }) => {
       const rttMs = Math.max(0, Date.now() - payload.clientSentAt);
+      oneWayLatencySecRef.current = rttMs / 2000;
       setOneWayLatencySec(rttMs / 2000);
     });
 
@@ -549,7 +603,7 @@ export const App: React.FC = () => {
     });
 
     socket.on('room:state', (incoming: RoomPlaybackState) => {
-      applyIncomingRoomState(incoming);
+      applyIncomingRoomState(incoming, false);
     });
 
     const pingInterval = window.setInterval(() => {
@@ -566,14 +620,14 @@ export const App: React.FC = () => {
     };
   }, [roomCode, applyIncomingRoomState]);
 
-  // Re-apply volumes & playback whenever localVolume, localMuted, or listenerUnlocked changes
+  // Re-apply volumes whenever localVolume, localMuted, or listenerUnlocked changes
   useEffect(() => {
-    if (roomState && listenerUnlocked) {
-      applyPlaybackStateToEngines(roomState, false);
+    if (roomStateRef.current && listenerUnlocked) {
+      applyPlaybackStateToEngines(roomStateRef.current, false, false);
     }
-  }, [localVolume, localMuted, listenerUnlocked, roomState, applyPlaybackStateToEngines]);
+  }, [localVolume, localMuted, listenerUnlocked, applyPlaybackStateToEngines]);
 
-  // Periodic UI progress ticker + Listener drift checker (~1s threshold) + Host crossfade auto-advance
+  // Periodic UI progress ticker + Listener drift checker (~2.5s threshold with 4s cooldown) + Host crossfade auto-advance
   useEffect(() => {
     const timer = window.setInterval(() => {
       if (!roomState || !roomState.currentTrack) return;
@@ -595,13 +649,21 @@ export const App: React.FC = () => {
           setDisplayDurationSec(dur);
         }
 
-        // Listener drift check (> 1.0s)
-        if (!isHost && listenerUnlocked && roomState.isPlaying && activeDeck.readyState >= 2) {
+        // Listener drift check (> 2.5s with 4s cooldown)
+        const nowMs = Date.now();
+        if (
+          !isHost &&
+          listenerUnlocked &&
+          roomState.isPlaying &&
+          activeDeck.readyState >= 2 &&
+          nowMs - lastDriftCorrectionRef.current > 4000
+        ) {
           const expected = getExpectedPositionSec();
           if (dur === 0 || expected < dur - 0.5) {
-            if (Math.abs(cur - expected) > 1.0) {
+            if (Math.abs(cur - expected) > 2.5) {
               activeDeck.currentTime = expected;
-              setLastDriftFixedMs(Date.now());
+              lastDriftCorrectionRef.current = nowMs;
+              setLastDriftFixedMs(nowMs);
             }
           }
         }
@@ -628,11 +690,19 @@ export const App: React.FC = () => {
           setDisplayDurationSec(dur);
         }
 
-        if (!isHost && listenerUnlocked && roomState.isPlaying && dur > 0) {
+        const nowMs = Date.now();
+        if (
+          !isHost &&
+          listenerUnlocked &&
+          roomState.isPlaying &&
+          dur > 0 &&
+          nowMs - lastDriftCorrectionRef.current > 4000
+        ) {
           const expected = getExpectedPositionSec();
-          if (Math.abs(cur - expected) > 1.2) {
+          if (Math.abs(cur - expected) > 2.5) {
             ytPlayerRef.current.seekTo(expected);
-            setLastDriftFixedMs(Date.now());
+            lastDriftCorrectionRef.current = nowMs;
+            setLastDriftFixedMs(nowMs);
           }
         }
       }

@@ -200,7 +200,8 @@ export function persistRoomState(state: RoomPlaybackState): void {
 
 export function executeHostCommand(
   payload: HostCommandPayload,
-  defaultRoomCode = 'AB12CD'
+  defaultRoomCode = 'AB12CD',
+  senderSocketId?: string
 ): { ok: boolean; error?: string; state?: RoomPlaybackState } {
   const code = (payload?.code || defaultRoomCode || 'AB12CD').trim().toUpperCase();
   if (!isValidHostAuth(payload?.password, payload?.hostToken, code)) {
@@ -431,7 +432,11 @@ export function executeHostCommand(
   };
 
   if (ioInstance) {
-    ioInstance.to(code).emit('room:state', broadcastState);
+    if (payload.action === 'sync_heartbeat' && senderSocketId) {
+      ioInstance.to(code).except(senderSocketId).emit('room:state', broadcastState);
+    } else {
+      ioInstance.to(code).emit('room:state', broadcastState);
+    }
   }
 
   return { ok: true, state: broadcastState };
@@ -525,7 +530,7 @@ export function setupSocketServer(io: Server): void {
         payload: HostCommandPayload,
         ack?: (res: { ok: boolean; error?: string; state?: RoomPlaybackState }) => void
       ) => {
-        const result = executeHostCommand(payload, joinedRoomCode || 'AB12CD');
+        const result = executeHostCommand(payload, joinedRoomCode || 'AB12CD', socket.id);
         if (typeof ack === 'function') {
           ack(result);
         }

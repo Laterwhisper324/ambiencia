@@ -129,20 +129,28 @@ export const YouTubeEmbedPlayer = forwardRef<YouTubePlayerHandle, Props>(
         }
         if (currentVideoIdRef.current !== cmd.videoId) {
           currentVideoIdRef.current = cmd.videoId;
+          const safeStart = Math.max(0, cmd.startSec || 0);
           if (cmd.autoPlay && typeof player.loadVideoById === 'function') {
-            player.loadVideoById(cmd.videoId, cmd.startSec);
+            player.loadVideoById(cmd.videoId, safeStart);
           } else if (typeof player.cueVideoById === 'function') {
-            player.cueVideoById(cmd.videoId, cmd.startSec);
+            player.cueVideoById(cmd.videoId, safeStart);
           }
         } else {
           const cur =
             typeof player.getCurrentTime === 'function' ? player.getCurrentTime() || 0 : 0;
-          if (Math.abs(cur - cmd.startSec) > 1.2 && typeof player.seekTo === 'function') {
+          const playerState =
+            typeof player.getPlayerState === 'function' ? player.getPlayerState() : -1;
+
+          if (
+            cmd.startSec >= 0 &&
+            Math.abs(cur - cmd.startSec) > 2.5 &&
+            typeof player.seekTo === 'function'
+          ) {
             player.seekTo(cmd.startSec, true);
           }
-          if (cmd.autoPlay && typeof player.playVideo === 'function') {
+          if (cmd.autoPlay && playerState !== 1 && playerState !== 3 && typeof player.playVideo === 'function') {
             player.playVideo();
-          } else if (!cmd.autoPlay && typeof player.pauseVideo === 'function') {
+          } else if (!cmd.autoPlay && (playerState === 1 || playerState === 3) && typeof player.pauseVideo === 'function') {
             player.pauseVideo();
           }
         }
