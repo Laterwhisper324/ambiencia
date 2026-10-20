@@ -32,32 +32,27 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.app = void 0;
-const express_1 = __importDefault(require("express"));
-exports.app = (0, express_1.default)();
-let innerApp = null;
-exports.app.use(async (req, res, next) => {
+const handler = async (req, res) => {
     try {
-        if (!innerApp) {
-            const mod = await Promise.resolve().then(() => __importStar(require('./app')));
-            innerApp = mod.app || mod.default;
-        }
-        return innerApp(req, res, next);
+        const mod = await Promise.resolve().then(() => __importStar(require('./app')));
+        const app = mod.app || mod.default;
+        return app(req, res);
     }
     catch (err) {
         console.error('[Bootstrap Error]:', err);
-        res.status(500).json({
-            error: 'Falha ao inicializar módulo do servidor.',
+        res.statusCode = 200;
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        res.end(JSON.stringify({
+            bootstrapError: true,
             message: err?.message || String(err),
             stack: err?.stack,
-        });
+            cwd: typeof process !== 'undefined' ? process.cwd() : null,
+        }));
     }
-});
-if (!process.env.VERCEL) {
+};
+if (typeof process !== 'undefined' && !process.env.VERCEL) {
     Promise.resolve().then(() => __importStar(require('./app'))).then((mod) => {
         mod.startStandaloneServer();
     })
@@ -65,9 +60,5 @@ if (!process.env.VERCEL) {
         console.error('[Standalone Startup Error]:', err);
     });
 }
-exports.app.default = exports.app;
-exports.app.app = exports.app;
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = exports.app;
-}
-exports.default = exports.app;
+exports.app = handler;
+exports.default = handler;

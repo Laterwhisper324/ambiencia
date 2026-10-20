@@ -1,27 +1,24 @@
-import express from 'express';
-
-export const app = express();
-
-let innerApp: express.Express | null = null;
-
-app.use(async (req, res, next) => {
+const handler = async (req: any, res: any) => {
   try {
-    if (!innerApp) {
-      const mod = await import('./app');
-      innerApp = mod.app || mod.default;
-    }
-    return innerApp(req, res, next);
+    const mod = await import('./app');
+    const app = mod.app || mod.default;
+    return app(req, res);
   } catch (err: any) {
     console.error('[Bootstrap Error]:', err);
-    res.status(500).json({
-      error: 'Falha ao inicializar módulo do servidor.',
-      message: err?.message || String(err),
-      stack: err?.stack,
-    });
+    res.statusCode = 200;
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.end(
+      JSON.stringify({
+        bootstrapError: true,
+        message: err?.message || String(err),
+        stack: err?.stack,
+        cwd: typeof process !== 'undefined' ? process.cwd() : null,
+      })
+    );
   }
-});
+};
 
-if (!process.env.VERCEL) {
+if (typeof process !== 'undefined' && !process.env.VERCEL) {
   import('./app')
     .then((mod) => {
       mod.startStandaloneServer();
@@ -31,10 +28,5 @@ if (!process.env.VERCEL) {
     });
 }
 
-(app as any).default = app;
-(app as any).app = app;
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = app;
-}
-
-export default app;
+export const app = handler;
+export default handler;
