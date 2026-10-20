@@ -128,4 +128,9 @@ if (!process.env.VERCEL) {
         });
     });
 }
+exports.app.default = exports.app;
+exports.app.app = exports.app;
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = exports.app;
+}
 exports.default = exports.app;

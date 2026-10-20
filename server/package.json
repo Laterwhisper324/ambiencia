@@ -1,6 +1,7 @@
 {
   "name": "ambiencia-server",
   "version": "1.0.0",
+  "type": "commonjs",
   "description": "Backend Node.js + Express + Socket.IO + SQLite para o player colaborativo Ambiência",
   "main": "dist/index.js",
   "scripts": {
@@ -20,9 +21,6 @@
     "multer": "^1.4.5-lts.1",
     "socket.io": "^4.8.1",
     "zod": "^3.24.1"
-  },
-  "optionalDependencies": {
-    "better-sqlite3": "^12.0.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12",

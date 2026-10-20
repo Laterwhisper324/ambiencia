@@ -145,4 +145,10 @@ if (!process.env.VERCEL) {
   });
 }
 
+(app as any).default = app;
+(app as any).app = app;
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = app;
+}
+
 export default app;
