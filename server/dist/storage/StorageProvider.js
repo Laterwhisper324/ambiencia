@@ -9,8 +9,6 @@ exports.getStorageProvider = getStorageProvider;
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
 const crypto_1 = __importDefault(require("crypto"));
-const client_s3_1 = require("@aws-sdk/client-s3");
-const s3_request_presigner_1 = require("@aws-sdk/s3-request-presigner");
 const config_1 = require("../config");
 /**
  * Sanitizes an untrusted filename, removing path traversal sequences,
@@ -149,12 +147,20 @@ exports.LocalDiskStorageProvider = LocalDiskStorageProvider;
  */
 class S3StorageProvider {
     client;
+    s3Mod;
+    presignerMod;
     bucket;
     publicBaseUrl;
     constructor() {
+        const dynReq = typeof require !== 'undefined' ? require : null;
+        if (!dynReq) {
+            throw new Error('S3StorageProvider requer suporte a CommonJS require.');
+        }
+        this.s3Mod = dynReq('@aws-sdk/client-s3');
+        this.presignerMod = dynReq('@aws-sdk/s3-request-presigner');
         this.bucket = config_1.config.s3.bucket;
         this.publicBaseUrl = config_1.config.s3.publicBaseUrl.replace(/\/$/, '');
-        this.client = new client_s3_1.S3Client({
+        this.client = new this.s3Mod.S3Client({
             region: config_1.config.s3.region || 'auto',
             endpoint: config_1.config.s3.endpoint || undefined,
             credentials: {
@@ -168,7 +174,7 @@ class S3StorageProvider {
         const storageKey = fixedKey
             ? sanitizeFilename(fixedKey)
             : `${crypto_1.default.randomUUID()}-${safeName}`;
-        await this.client.send(new client_s3_1.PutObjectCommand({
+        await this.client.send(new this.s3Mod.PutObjectCommand({
             Bucket: this.bucket,
             Key: storageKey,
             Body: buffer,
@@ -182,7 +188,7 @@ class S3StorageProvider {
     async deleteFile(storageKey) {
         try {
             const cleanKey = sanitizeFilename(storageKey);
-            await this.client.send(new client_s3_1.DeleteObjectCommand({
+            await this.client.send(new this.s3Mod.DeleteObjectCommand({
                 Bucket: this.bucket,
                 Key: cleanKey,
             }));
@@ -194,7 +200,7 @@ class S3StorageProvider {
     async fileExists(storageKey) {
         try {
             const cleanKey = sanitizeFilename(storageKey);
-            await this.client.send(new client_s3_1.HeadObjectCommand({
+            await this.client.send(new this.s3Mod.HeadObjectCommand({
                 Bucket: this.bucket,
                 Key: cleanKey,
             }));
@@ -210,11 +216,13 @@ class S3StorageProvider {
             res.redirect(302, `${this.publicBaseUrl}/${encodeURIComponent(cleanKey)}`);
             return;
         }
-        const command = new client_s3_1.GetObjectCommand({
+        const command = new this.s3Mod.GetObjectCommand({
             Bucket: this.bucket,
             Key: cleanKey,
         });
-        const signedUrl = await (0, s3_request_presigner_1.getSignedUrl)(this.client, command, { expiresIn: 3600 });
+        const signedUrl = await this.presignerMod.getSignedUrl(this.client, command, {
+            expiresIn: 3600,
+        });
         res.redirect(302, signedUrl);
     }
 }
