@@ -4,37 +4,239 @@
 
 @layer base {
   body {
-    @apply bg-[#0B0E14] text-slate-100 font-sans overflow-x-hidden;
+    @apply bg-brand-dark text-brand-light font-sans overflow-x-hidden selection:bg-brand-red selection:text-brand-light;
+    background-color: #0e0e0e;
   }
 
-  /* Custom dark scrollbars */
+  /* Custom dark scrollbars with Taste refinement */
   ::-webkit-scrollbar {
     width: 6px;
     height: 6px;
   }
   ::-webkit-scrollbar-track {
-    background: #0b0e14;
+    background: #0e0e0e;
   }
   ::-webkit-scrollbar-thumb {
-    background: #262f42;
-    border-radius: 9999px;
+    background: #2a2a33;
+    border-radius: 4px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: #3b4863;
+    background: #cc001e;
   }
 }
 
-@keyframes pulseGlow {
+/* Taste-Skill micro-interactions & tactile transitions */
+.taste-card {
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.taste-card:hover {
+  transform: translateY(-2px);
+}
+
+.taste-btn {
+  transition: transform 0.12s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.taste-btn:active {
+  transform: scale(0.97);
+}
+
+@keyframes pulseBrandGlow {
   0%, 100% {
-    opacity: 0.7;
-    transform: scale(1);
+    opacity: 0.9;
+    box-shadow: 0 0 24px -4px rgba(204, 0, 30, 0.55);
   }
   50% {
     opacity: 1;
-    transform: scale(1.03);
+    box-shadow: 0 0 36px 0px rgba(204, 0, 30, 0.85);
   }
 }
 
 .scene-active-glow {
-  animation: pulseGlow 3s ease-in-out infinite;
+  animation: pulseBrandGlow 2.8s ease-in-out infinite;
+}
+
+/* Custom range inputs */
+input[type="range"] {
+  accent-color: #cc001e;
+}
+
+/* ========================================================
+   HARD-RABBIT-4 BY ESCANNORD (Uiverse.io)
+   Dark Dotted Background Pattern + Reactive Red Layer
+   ======================================================== */
+.escannord-dots-base {
+  background-color: #0e0e0e;
+  background-image: radial-gradient(
+    circle at 50% 50%,
+    rgba(255, 255, 255, 0.12) 1.5px,
+    transparent 1.6px
+  );
+  background-size: 18px 18px;
+}
+
+.escannord-dots-glow {
+  background-image: radial-gradient(
+    circle at 50% 50%,
+    #cc001e 2px,
+    rgba(204, 0, 30, 0.6) 2.6px,
+    transparent 2.8px
+  );
+  background-size: 18px 18px;
+  will-change: mask-image, -webkit-mask-image;
+}
+
+/* ========================================================
+   YOUNG-WALRUS-64 BY ANDREW-MANZYK (Uiverse.io)
+   Swirling Liquid Orb / AI Loader Logo (Crimson Theme)
+   ======================================================== */
+.walrus-logo-base {
+  box-shadow: 0 0 16px 2px rgba(204, 0, 30, 0.5);
+}
+
+.walrus-conic-ring {
+  animation: walrus-spin 3s linear infinite;
+  filter: blur(0.5px);
+}
+
+.walrus-blob-layer-1 {
+  background: radial-gradient(circle at 30% 30%, #ff2640 0%, transparent 55%),
+              radial-gradient(circle at 70% 70%, #cc001e 0%, transparent 55%);
+  animation: walrus-rotate-blob 4s ease-in-out infinite alternate;
+}
+
+.walrus-blob-layer-2 {
+  background: radial-gradient(circle at 65% 35%, #ff4d64 0%, transparent 50%),
+              radial-gradient(circle at 35% 65%, #7a0010 0%, transparent 50%);
+  animation: walrus-spin-reverse 4.5s linear infinite;
+}
+
+.walrus-core-pulse {
+  animation: walrus-pulse 2.2s ease-in-out infinite;
+}
+
+.walrus-orb-rim {
+  border-top: solid 1.5px #ff5972;
+  border-bottom: solid 1.5px #cc001e;
+  box-shadow:
+    inset 0 3px 5px rgba(255, 89, 114, 0.45),
+    inset 0 -3px 5px rgba(204, 0, 30, 0.55);
+}
+
+@keyframes walrus-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes walrus-spin-reverse {
+  from {
+    transform: rotate(360deg);
+  }
+  to {
+    transform: rotate(0deg);
+  }
+}
+
+@keyframes walrus-rotate-blob {
+  0% {
+    transform: rotate(0deg) scale(0.9);
+  }
+  50% {
+    transform: rotate(180deg) scale(1.15);
+  }
+  100% {
+    transform: rotate(360deg) scale(0.9);
+  }
+}
+
+@keyframes walrus-pulse {
+  0%, 100% {
+    transform: scale(0.85);
+    opacity: 0.75;
+  }
+  50% {
+    transform: scale(1.12);
+    opacity: 1;
+  }
+}
+
+/* ========================================================
+   POPULAR-SEAHORSE-73 BY MUHAMMADHASANN (Uiverse.io)
+   Animated Play/Pause Toggle Switch (Carmine Red + Obsidian)
+   ======================================================== */
+.popular-seahorse-cont {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 82px;
+  height: 42px;
+  user-select: none;
+}
+
+.popular-seahorse-cont .toggle-input {
+  display: none;
+}
+
+.popular-seahorse-cont .toggle-label {
+  cursor: pointer;
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 4px;
+  width: 82px;
+  height: 42px;
+  background: #141417;
+  border: 1px solid #24242b;
+  border-radius: 9999px;
+  box-sizing: border-box;
+  box-shadow: 0px 2px 10px rgba(0, 0, 0, 0.6), inset 0 1px 2px rgba(0, 0, 0, 0.4);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.popular-seahorse-cont:hover .toggle-label {
+  border-color: rgba(204, 0, 30, 0.4);
+  box-shadow: 0px 0px 16px -4px rgba(204, 0, 30, 0.4), inset 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+.popular-seahorse-cont .toggle-label .cont-label-play {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  aspect-ratio: 1 / 1;
+  background: #2e2e38;
+  border-radius: 9999px;
+  transition: all 0.5s cubic-bezier(1, 0, 0, 1);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+}
+
+.popular-seahorse-cont .toggle-input:checked + .toggle-label .cont-label-play {
+  background: #cc001e;
+  transform: translateX(40px);
+  box-shadow: 0 0 16px rgba(204, 0, 30, 0.7), 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.popular-seahorse-cont .toggle-label .label-play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: inline-block;
+  width: 15px;
+  aspect-ratio: 1 / 1;
+  background: #f0f4f5;
+  border-radius: 2px;
+  clip-path: polygon(25% 0, 75% 50%, 25% 100%, 25% 51%);
+  transition: all 0.5s cubic-bezier(1, 0, 0, 1);
+}
+
+.popular-seahorse-cont .toggle-input:checked + .toggle-label .label-play {
+  width: 14px;
+  background: #ffffff;
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%);
 }

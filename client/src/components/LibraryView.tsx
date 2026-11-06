@@ -124,7 +124,7 @@ export const LibraryView: React.FC<Props> = ({
     if (file.size > maxBytes) {
       const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
       setErrorMsg(
-        `O arquivo "${file.name}" (${sizeMb} MB) excede o limite máximo configurado de ${maxUploadMb} MB.`
+        `O arquivo "${file.name}" (${sizeMb} MB) excede o limite máximo de ${maxUploadMb} MB.`
       );
       return;
     }
@@ -141,11 +141,12 @@ export const LibraryView: React.FC<Props> = ({
         isAmbient: uploadAsAmbient,
         durationSec,
       });
+
       await onRefreshData();
       setSuccessMsg(`Faixa "${track.title}" enviada com sucesso!`);
       if (fileInputRef.current) fileInputRef.current.value = '';
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'Erro ao enviar arquivo de áudio.');
+      setErrorMsg(err instanceof Error ? err.message : 'Erro ao fazer upload do arquivo.');
     } finally {
       setUploading(false);
     }
@@ -153,13 +154,12 @@ export const LibraryView: React.FC<Props> = ({
 
   const handleAddYouTube = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!ytUrl.trim()) {
-      setErrorMsg('Cole um link válido de vídeo ou playlist do YouTube / YouTube Music.');
-      return;
-    }
+    if (!ytUrl.trim()) return;
+
     setErrorMsg(null);
     setSuccessMsg(null);
     setAddingYt(true);
+
     try {
       const tags = ytTags
         .split(',')
@@ -170,18 +170,23 @@ export const LibraryView: React.FC<Props> = ({
         title: ytCustomTitle.trim() || undefined,
         tags,
       });
+
+      await onRefreshData();
+
+      if (res.isPlaylistImport && res.tracks) {
+        setSuccessMsg(
+          `Playlist "${res.playlist?.name}" importada com sucesso com ${res.tracks.length} faixas!`
+        );
+      } else if (res.track) {
+        setSuccessMsg(`Faixa do YouTube "${res.track.title}" adicionada!`);
+      } else {
+        setSuccessMsg('Mídia importada com sucesso!');
+      }
+
       setYtUrl('');
       setYtCustomTitle('');
-      await onRefreshData();
-      if (res.isPlaylistImport && res.playlist) {
-        setSuccessMsg(
-          `Playlist "${res.playlist.name}" importada com ${res.tracks?.length || 1} faixas (criada nas suas Playlists e na Biblioteca)!`
-        );
-      } else {
-        setSuccessMsg(`Faixa "${res.track.title}" adicionada à biblioteca!`);
-      }
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'Erro ao adicionar link do YouTube / YouTube Music.');
+      setErrorMsg(err instanceof Error ? err.message : 'Erro ao importar do YouTube.');
     } finally {
       setAddingYt(false);
     }
@@ -198,22 +203,25 @@ export const LibraryView: React.FC<Props> = ({
     try {
       const tags = editTags
         .split(',')
-        .map((t) => t.trim())
+        .map((s) => s.trim())
         .filter(Boolean);
       await api.updateTrack(trackId, {
         title: editTitle.trim(),
         tags,
         isAmbient: editAmbient,
       });
-      setEditingId(null);
       await onRefreshData();
+      setEditingId(null);
+      setSuccessMsg('Faixa atualizada com sucesso!');
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Erro ao atualizar faixa.');
     }
   };
 
   const handleDeleteTrack = async (track: Track) => {
-    if (!window.confirm(`Deseja realmente excluir "${track.title}" da biblioteca?`)) return;
+    if (!window.confirm(`Deseja realmente remover a faixa "${track.title}" da biblioteca?`)) {
+      return;
+    }
     try {
       await api.deleteTrack(track.id);
       await onRefreshData();
@@ -225,8 +233,8 @@ export const LibraryView: React.FC<Props> = ({
 
   const handleQuickAddToPlaylist = async (playlistId: string, trackId: string) => {
     try {
-      await api.addTrackToPlaylist(playlistId, trackId);
       setAddingToPlaylistTrackId(null);
+      await api.addTrackToPlaylist(playlistId, trackId);
       await onRefreshData();
       setSuccessMsg('Faixa adicionada à playlist!');
     } catch (err) {
@@ -238,30 +246,30 @@ export const LibraryView: React.FC<Props> = ({
     <div className="space-y-6">
       {/* Feedback Alerts */}
       {errorMsg && (
-        <div className="flex items-center justify-between gap-3 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-[#cc001e]/40 bg-[#cc001e]/10 px-5 py-3.5 text-xs text-[#f0f4f5] animate-in fade-in">
           <div className="flex items-center gap-2.5">
-            <AlertCircle className="w-5 h-5 text-red-400 shrink-0" />
+            <AlertCircle className="w-4 h-4 text-[#cc001e] shrink-0" />
             <span>{errorMsg}</span>
           </div>
-          <button onClick={() => setErrorMsg(null)} className="text-red-300 hover:text-white">
+          <button onClick={() => setErrorMsg(null)} className="taste-btn text-[#cbd5e1] hover:text-[#f0f4f5]">
             <X className="w-4 h-4" />
           </button>
         </div>
       )}
 
       {successMsg && (
-        <div className="flex items-center justify-between gap-3 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-5 py-3.5 text-xs text-emerald-200 animate-in fade-in">
           <div className="flex items-center gap-2.5">
-            <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
             <span>{successMsg}</span>
           </div>
-          <button onClick={() => setSuccessMsg(null)} className="text-emerald-300 hover:text-white">
+          <button onClick={() => setSuccessMsg(null)} className="taste-btn text-emerald-300 hover:text-white">
             <X className="w-4 h-4" />
           </button>
         </div>
       )}
 
-      {/* Dual Ingestion Cards: MP3 Drag-and-Drop & YouTube Official Embed Link */}
+      {/* Dual Ingestion Cards: MP3 Drag-and-Drop & YouTube Embed Link */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {/* MP3 Upload Card */}
         <div
@@ -275,24 +283,24 @@ export const LibraryView: React.FC<Props> = ({
             setIsDragging(false);
             handleFilesUpload(e.dataTransfer.files);
           }}
-          className={`rounded-2xl border-2 border-dashed p-5 transition flex flex-col justify-between ${
+          className={`taste-card rounded-md border-2 border-dashed p-6 transition flex flex-col justify-between ${
             isDragging
-              ? 'border-amber-400 bg-amber-500/10'
-              : 'border-slate-800 bg-[#121722]/90 hover:border-slate-700'
+              ? 'border-[#cc001e] bg-[#cc001e]/10 shadow-brand-glow-sm'
+              : 'border-[#2a2a33] bg-[#141417] hover:border-[#3d3d47]'
           }`}
         >
           <div>
             <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2 text-amber-400 font-semibold text-sm">
+              <div className="flex items-center gap-2.5 text-[#cc001e] font-bold text-sm">
                 <Upload className="w-4 h-4" />
-                <span>Upload de Arquivo MP3 / M4A</span>
+                <span>Upload de Áudio (MP3 / M4A)</span>
               </div>
-              <span className="text-xs font-mono text-slate-400">
+              <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-[#0e0e0e] border border-[#2a2a33] text-[#cbd5e1]">
                 Máx. {maxUploadMb} MB
               </span>
             </div>
-            <p className="text-xs text-slate-400 mb-4">
-              Arraste e solte um arquivo <code className="text-slate-200">.mp3</code> ou <code className="text-slate-200">.m4a</code> aqui ou use o seletor. Servido via HTTP Streaming com suporte a Range requests e crossfade.
+            <p className="text-xs text-[#cbd5e1] mb-5 leading-relaxed">
+              Arraste e solte seus arquivos de áudio aqui. Executado com streaming HTTP direto e suporte a crossfade duplo.
             </p>
           </div>
 
@@ -302,15 +310,15 @@ export const LibraryView: React.FC<Props> = ({
                 type="text"
                 value={uploadTags}
                 onChange={(e) => setUploadTags(e.target.value)}
-                placeholder="Tags (ex.: batalha, boss)"
-                className="flex-1 min-w-[140px] rounded-xl border border-slate-800 bg-slate-900/90 px-3 py-1.5 text-xs text-slate-200 focus:border-amber-500 focus:outline-none"
+                placeholder="Tags (ex.: combate, taverna)"
+                className="flex-1 min-w-[140px] rounded-lg border border-[#2a2a33] bg-[#0e0e0e] px-3.5 py-2 text-xs text-[#f0f4f5] focus:border-[#cc001e] focus:outline-none transition"
               />
-              <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer select-none">
+              <label className="flex items-center gap-2 text-xs text-[#cbd5e1] cursor-pointer select-none">
                 <input
                   type="checkbox"
                   checked={uploadAsAmbient}
                   onChange={(e) => setUploadAsAmbient(e.target.checked)}
-                  className="rounded accent-teal-400"
+                  className="rounded accent-[#cc001e]"
                 />
                 <span>Camada Ambiente (Loop)</span>
               </label>
@@ -319,7 +327,7 @@ export const LibraryView: React.FC<Props> = ({
             <input
               ref={fileInputRef}
               type="file"
-              accept=".mp3,.m4a,.wav,.aac,.ogg,audio/mpeg,audio/mp3,audio/mp4,audio/x-m4a,audio/m4a,audio/aac,audio/wav,audio/ogg"
+              accept=".mp3,.m4a,.wav,.aac,.ogg,audio/*"
               onChange={(e) => handleFilesUpload(e.target.files)}
               className="hidden"
             />
@@ -327,31 +335,31 @@ export const LibraryView: React.FC<Props> = ({
               type="button"
               disabled={uploading}
               onClick={() => fileInputRef.current?.click()}
-              className="w-full rounded-xl bg-amber-500/90 hover:bg-amber-400 text-slate-950 font-semibold py-2.5 text-xs transition flex items-center justify-center gap-2 disabled:opacity-50"
+              className="taste-btn w-full rounded-lg bg-[#f0f4f5] hover:bg-white text-[#0e0e0e] font-bold py-2.5 text-xs transition flex items-center justify-center gap-2 disabled:opacity-50 shadow-sm"
             >
-              <Upload className="w-4 h-4" />
-              {uploading ? 'Enviando e validando áudio...' : 'Selecionar ou Soltar Arquivo MP3 / M4A'}
+              <Upload className="w-4 h-4 text-[#0e0e0e]" />
+              {uploading ? 'Enviando e validando...' : 'Selecionar Arquivo do Computador'}
             </button>
           </div>
         </div>
 
-        {/* YouTube Direct Link / Playlist Card */}
+        {/* YouTube Ingestion Card */}
         <form
           onSubmit={handleAddYouTube}
-          className="rounded-2xl border border-slate-800 bg-[#121722]/90 p-5 flex flex-col justify-between space-y-3"
+          className="taste-card rounded-md border border-[#2a2a33] bg-[#141417] p-6 flex flex-col justify-between space-y-4"
         >
           <div>
             <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2 text-red-400 font-semibold text-sm">
+              <div className="flex items-center gap-2.5 text-[#cc001e] font-bold text-sm">
                 <Youtube className="w-4 h-4" />
-                <span>YouTube & YouTube Music (Faixa ou Playlist)</span>
+                <span>YouTube & YouTube Music</span>
               </div>
-              <span className="text-[11px] rounded-full bg-red-500/15 text-red-300 px-2.5 py-0.5 border border-red-500/30">
-                YouTube IFrame API Oficial
+              <span className="text-[10px] font-mono rounded-full bg-[#cc001e]/15 text-[#cc001e] px-2.5 py-0.5 border border-[#cc001e]/30">
+                IFrame Sincronizado
               </span>
             </div>
-            <p className="text-xs text-slate-400 mb-3">
-              Cole o link de um vídeo ou de uma <strong>playlist do YouTube Music / YouTube</strong> (<code className="text-slate-300">music.youtube.com/playlist?list=...</code>). Se for playlist, todas as faixas e a playlist serão importadas automaticamente!
+            <p className="text-xs text-[#cbd5e1] mb-4 leading-relaxed">
+              Cole o link de uma música ou playlist do YouTube/YT Music. O importador mapeia faixas e títulos automaticamente.
             </p>
 
             <div className="space-y-2.5">
@@ -360,22 +368,22 @@ export const LibraryView: React.FC<Props> = ({
                 value={ytUrl}
                 onChange={(e) => setYtUrl(e.target.value)}
                 placeholder="https://music.youtube.com/playlist?list=... ou https://youtu.be/..."
-                className="w-full rounded-xl border border-slate-800 bg-slate-900/90 px-3.5 py-2 text-xs text-slate-100 focus:border-red-500 focus:outline-none"
+                className="w-full rounded-lg border border-[#2a2a33] bg-[#0e0e0e] px-3.5 py-2 text-xs text-[#f0f4f5] focus:border-[#cc001e] focus:outline-none transition"
               />
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <input
                   type="text"
                   value={ytCustomTitle}
                   onChange={(e) => setYtCustomTitle(e.target.value)}
-                  placeholder="Nome da faixa/playlist (auto se vazio)"
-                  className="rounded-xl border border-slate-800 bg-slate-900/90 px-3 py-1.5 text-xs text-slate-200 focus:border-red-500 focus:outline-none"
+                  placeholder="Nome customizado (opcional)"
+                  className="rounded-lg border border-[#2a2a33] bg-[#0e0e0e] px-3 py-2 text-xs text-[#f0f4f5] focus:border-[#cc001e] focus:outline-none transition"
                 />
                 <input
                   type="text"
                   value={ytTags}
                   onChange={(e) => setYtTags(e.target.value)}
-                  placeholder="Tags (ex.: youtube, taverna)"
-                  className="rounded-xl border border-slate-800 bg-slate-900/90 px-3 py-1.5 text-xs text-slate-200 focus:border-red-500 focus:outline-none"
+                  placeholder="Tags (ex.: taverna, calmo)"
+                  className="rounded-lg border border-[#2a2a33] bg-[#0e0e0e] px-3 py-2 text-xs text-[#f0f4f5] focus:border-[#cc001e] focus:outline-none transition"
                 />
               </div>
             </div>
@@ -384,24 +392,24 @@ export const LibraryView: React.FC<Props> = ({
           <button
             type="submit"
             disabled={addingYt}
-            className="w-full rounded-xl bg-red-500/90 hover:bg-red-500 text-white font-semibold py-2.5 text-xs transition flex items-center justify-center gap-2 disabled:opacity-50"
+            className="taste-btn w-full rounded-lg bg-[#cc001e] hover:bg-[#e00022] text-white font-bold py-2.5 text-xs transition flex items-center justify-center gap-2 shadow-brand-glow-sm disabled:opacity-50"
           >
             <Plus className="w-4 h-4" />
-            {addingYt ? 'Importando do YouTube / YouTube Music...' : 'Adicionar Faixa ou Playlist'}
+            {addingYt ? 'Importando do YouTube...' : 'Adicionar Faixa ou Playlist'}
           </button>
         </form>
       </div>
 
       {/* Search & Filter Controls */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-[#121722]/80 border border-slate-800/80 rounded-2xl p-3.5">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-[#141417] border border-[#2a2a33] rounded-md p-3">
         <div className="relative flex-1">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 text-[#cbd5e1] absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Buscar faixa por título ou tag..."
-            className="w-full rounded-xl border border-slate-800 bg-slate-900/90 pl-9 pr-4 py-2 text-xs text-slate-100 focus:border-amber-500 focus:outline-none"
+            placeholder="Buscar por título ou tag..."
+            className="w-full rounded-lg border border-[#2a2a33] bg-[#0e0e0e] pl-9 pr-4 py-2 text-xs text-[#f0f4f5] placeholder-[#4f5660] focus:border-[#cc001e] focus:outline-none transition"
           />
         </div>
 
@@ -409,7 +417,7 @@ export const LibraryView: React.FC<Props> = ({
           {(
             [
               { id: 'all', label: 'Todas' },
-              { id: 'mp3', label: 'MP3 / M4A Local' },
+              { id: 'mp3', label: 'MP3 / M4A' },
               { id: 'youtube', label: 'YouTube' },
               { id: 'ambient', label: '🌧️ Ambiente' },
             ] as const
@@ -417,10 +425,10 @@ export const LibraryView: React.FC<Props> = ({
             <button
               key={tab.id}
               onClick={() => setFilterType(tab.id)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-medium transition ${
+              className={`taste-btn px-3 py-1.5 rounded-md text-xs font-semibold transition ${
                 filterType === tab.id
-                  ? 'bg-amber-500 text-slate-950 font-semibold'
-                  : 'bg-slate-900 text-slate-300 hover:bg-slate-800'
+                  ? 'bg-[#cc001e] text-white shadow-brand-glow-sm'
+                  : 'bg-[#1a1a1f] text-[#cbd5e1] hover:text-[#f0f4f5] hover:bg-[#23232a]'
               }`}
             >
               {tab.label}
@@ -431,7 +439,7 @@ export const LibraryView: React.FC<Props> = ({
             <select
               value={selectedTag}
               onChange={(e) => setSelectedTag(e.target.value)}
-              className="rounded-xl border border-slate-800 bg-slate-900 px-2.5 py-1.5 text-xs text-slate-300"
+              className="rounded-md border border-[#2a2a33] bg-[#1a1a1f] px-3 py-1.5 text-xs text-[#cbd5e1] focus:border-[#cc001e] focus:outline-none"
             >
               <option value="">Todas as tags</option>
               {allTags.map((tg) => (
@@ -446,11 +454,11 @@ export const LibraryView: React.FC<Props> = ({
 
       {/* Track List */}
       {filteredTracks.length === 0 ? (
-        <div className="rounded-2xl border border-slate-800/80 bg-[#121722]/40 p-10 text-center">
-          <Music className="w-8 h-8 text-slate-600 mx-auto mb-2" />
-          <p className="text-sm text-slate-300 font-medium">Nenhuma faixa encontrada</p>
-          <p className="text-xs text-slate-500 mt-1">
-            Envie um arquivo MP3 ou adicione um link do YouTube acima.
+        <div className="rounded-md border border-[#2a2a33] bg-[#141417] p-12 text-center">
+          <Music className="w-8 h-8 text-[#4f5660] mx-auto mb-2" />
+          <p className="text-sm text-[#f0f4f5] font-semibold">Nenhuma faixa encontrada</p>
+          <p className="text-xs text-[#cbd5e1] mt-1">
+            Envie um arquivo MP3 ou importe uma trilha do YouTube nos painéis acima.
           </p>
         </div>
       ) : (
@@ -462,37 +470,37 @@ export const LibraryView: React.FC<Props> = ({
             return (
               <div
                 key={track.id}
-                className={`rounded-xl border p-3 transition flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                className={`taste-card rounded-lg border p-3 transition flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
                   isCurrent
-                    ? 'border-amber-500/60 bg-amber-500/10'
-                    : 'border-slate-800/80 bg-[#121722]/80 hover:border-slate-700'
+                    ? 'border-[#cc001e] bg-[#cc001e]/10 shadow-brand-glow-sm'
+                    : 'border-[#24242b] bg-[#141417] hover:border-[#383842]'
                 }`}
               >
                 <div className="flex items-center gap-3 min-w-0 flex-1">
                   <button
                     onClick={() => onPlayTrack(track)}
-                    className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition ${
+                    className={`taste-btn w-9 h-9 rounded-md flex items-center justify-center shrink-0 transition ${
                       isCurrent
-                        ? 'bg-amber-500 text-slate-950'
-                        : 'bg-slate-800 text-slate-200 hover:bg-amber-500 hover:text-slate-950'
+                        ? 'bg-[#cc001e] text-white shadow-brand-glow-sm'
+                        : 'bg-[#23232a] text-[#f0f4f5] hover:bg-[#cc001e] hover:text-white'
                     }`}
                     title="Tocar faixa agora"
                   >
-                    <Play className="w-4 h-4 fill-current" />
+                    <Play className="w-4 h-4 fill-current ml-0.5" />
                   </button>
 
                   {track.thumbnailUrl ? (
                     <img
                       src={track.thumbnailUrl}
                       alt={track.title}
-                      className="w-12 h-9 object-cover rounded-lg border border-slate-700 shrink-0"
+                      className="w-12 h-9 object-cover rounded-lg border border-[#2a2a33] shrink-0"
                     />
                   ) : (
-                    <div className="w-12 h-9 rounded-lg bg-slate-800/90 border border-slate-700 flex items-center justify-center shrink-0">
+                    <div className="w-12 h-9 rounded-lg bg-[#0e0e0e] border border-[#2a2a33] flex items-center justify-center shrink-0">
                       {track.isAmbient ? (
-                        <CloudRain className="w-4 h-4 text-teal-400" />
+                        <CloudRain className="w-4 h-4 text-[#cbd5e1]" />
                       ) : (
-                        <Music className="w-4 h-4 text-amber-400" />
+                        <Music className="w-4 h-4 text-[#cc001e]" />
                       )}
                     </div>
                   )}
@@ -503,36 +511,37 @@ export const LibraryView: React.FC<Props> = ({
                         type="text"
                         value={editTitle}
                         onChange={(e) => setEditTitle(e.target.value)}
-                        className="rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1 text-xs text-white"
+                        className="rounded-md border border-[#2a2a33] bg-[#0e0e0e] px-3 py-1.5 text-xs text-[#f0f4f5] focus:border-[#cc001e] focus:outline-none"
                         placeholder="Título da faixa"
                       />
                       <input
                         type="text"
                         value={editTags}
                         onChange={(e) => setEditTags(e.target.value)}
-                        className="rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1 text-xs text-slate-300"
-                        placeholder="Tags separadas por vírgula"
+                        className="rounded-md border border-[#2a2a33] bg-[#0e0e0e] px-3 py-1.5 text-xs text-[#cbd5e1] focus:border-[#cc001e] focus:outline-none"
+                        placeholder="Tags (separadas por vírgula)"
                       />
-                      <label className="flex items-center gap-1.5 text-xs text-teal-300 sm:col-span-2">
+                      <label className="flex items-center gap-2 text-xs text-[#cbd5e1] sm:col-span-2">
                         <input
                           type="checkbox"
                           checked={editAmbient}
                           onChange={(e) => setEditAmbient(e.target.checked)}
+                          className="rounded accent-[#cc001e]"
                         />
-                        Disponível como Camada de Som Ambiente (Loop)
+                        Disponível como Som Ambiente (Loop)
                       </label>
                     </div>
                   ) : (
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-medium text-sm text-slate-100 truncate">
+                        <span className="font-semibold text-xs sm:text-sm text-[#f0f4f5] truncate">
                           {track.title}
                         </span>
                         <span
-                          className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded-full border ${
+                          className={`text-[9px] font-mono uppercase px-2 py-0.5 rounded-full border ${
                             track.sourceType === 'youtube'
-                              ? 'border-red-500/30 bg-red-500/10 text-red-300'
-                              : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                              ? 'border-[#cc001e]/40 bg-[#cc001e]/15 text-[#cc001e]'
+                              : 'border-[#2a2a33] bg-[#0e0e0e] text-[#cbd5e1]'
                           }`}
                         >
                           {track.sourceType === 'youtube'
@@ -543,8 +552,8 @@ export const LibraryView: React.FC<Props> = ({
                             : 'MP3'}
                         </span>
                         {track.isAmbient && (
-                          <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded-full border border-teal-500/30 bg-teal-500/10 text-teal-300">
-                            Ambiente Loop
+                          <span className="text-[9px] font-mono uppercase px-2 py-0.5 rounded-full border border-blue-500/30 bg-blue-500/10 text-blue-300">
+                            Loop
                           </span>
                         )}
                       </div>
@@ -553,9 +562,9 @@ export const LibraryView: React.FC<Props> = ({
                         {track.tags.map((tg) => (
                           <span
                             key={tg}
-                            className="inline-flex items-center gap-0.5 text-[11px] text-slate-400 bg-slate-900/90 px-2 py-0.5 rounded-md border border-slate-800"
+                            className="inline-flex items-center gap-0.5 text-[10px] text-[#cbd5e1] bg-[#0e0e0e] px-2 py-0.5 rounded-md border border-[#222228]"
                           >
-                            <Tag className="w-2.5 h-2.5 text-slate-500" />
+                            <Tag className="w-2.5 h-2.5 text-[#5a5a66]" />
                             {tg}
                           </span>
                         ))}
@@ -570,14 +579,14 @@ export const LibraryView: React.FC<Props> = ({
                     <>
                       <button
                         onClick={() => saveEdit(track.id)}
-                        className="rounded-lg bg-emerald-500/20 border border-emerald-500/40 p-1.5 text-emerald-300 hover:bg-emerald-500/30"
+                        className="taste-btn rounded-md bg-emerald-500/20 border border-emerald-500/40 p-1.5 text-emerald-300 hover:bg-emerald-500/30"
                         title="Salvar"
                       >
                         <Check className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => setEditingId(null)}
-                        className="rounded-lg bg-slate-800 p-1.5 text-slate-400 hover:text-white"
+                        className="taste-btn rounded-md bg-[#23232a] p-1.5 text-[#cbd5e1] hover:text-[#f0f4f5]"
                         title="Cancelar"
                       >
                         <X className="w-4 h-4" />
@@ -593,7 +602,7 @@ export const LibraryView: React.FC<Props> = ({
                               addingToPlaylistTrackId === track.id ? null : track.id
                             )
                           }
-                          className="rounded-lg border border-slate-700/80 bg-slate-900 px-2.5 py-1.5 text-xs text-slate-300 hover:border-amber-500/50 hover:text-amber-300 flex items-center gap-1"
+                          className="taste-btn rounded-md border border-[#2a2a33] bg-[#1a1a1f] px-2.5 py-1.5 text-xs text-[#cbd5e1] hover:border-[#cc001e] hover:text-[#f0f4f5] flex items-center gap-1"
                           title="Adicionar a uma playlist"
                         >
                           <Plus className="w-3.5 h-3.5" />
@@ -601,15 +610,15 @@ export const LibraryView: React.FC<Props> = ({
                         </button>
 
                         {addingToPlaylistTrackId === track.id && (
-                          <div className="absolute right-0 mt-1 w-52 rounded-xl border border-slate-700 bg-slate-900 shadow-2xl py-1.5 z-30">
-                            <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400 border-b border-slate-800">
+                          <div className="absolute right-0 mt-1 w-52 rounded-lg border border-[#2a2a33] bg-[#141417] shadow-2xl py-1.5 z-30 animate-in fade-in">
+                            <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-[#cbd5e1] border-b border-[#24242b]">
                               Adicionar em:
                             </div>
                             {playlists.map((pl) => (
                               <button
                                 key={pl.id}
                                 onClick={() => handleQuickAddToPlaylist(pl.id, track.id)}
-                                className="w-full text-left px-3 py-1.5 text-xs text-slate-200 hover:bg-amber-500/20 hover:text-amber-300 truncate"
+                                className="taste-btn w-full text-left px-3 py-1.5 text-xs text-[#f0f4f5] hover:bg-[#cc001e]/20 hover:text-white truncate"
                               >
                                 {pl.name}
                               </button>
@@ -620,14 +629,14 @@ export const LibraryView: React.FC<Props> = ({
 
                       <button
                         onClick={() => startEditing(track)}
-                        className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                        className="taste-btn rounded-md p-1.5 text-[#cbd5e1] hover:bg-[#23232a] hover:text-[#f0f4f5]"
                         title="Renomear ou editar tags"
                       >
                         <Edit3 className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => handleDeleteTrack(track)}
-                        className="rounded-lg p-1.5 text-slate-400 hover:bg-red-500/15 hover:text-red-400"
+                        className="taste-btn rounded-md p-1.5 text-[#cbd5e1] hover:bg-[#cc001e]/20 hover:text-[#cc001e]"
                         title="Excluir faixa"
                       >
                         <Trash2 className="w-4 h-4" />

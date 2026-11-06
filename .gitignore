@@ -16,9 +16,12 @@ server/.env
 # Local SQLite database & uploaded audio
 server/data/
 server/uploads/
+data/
+uploads/
 
 # Logs & OS files
 *.log
 .DS_Store
 Thumbs.db
 .vercel
+.agents/

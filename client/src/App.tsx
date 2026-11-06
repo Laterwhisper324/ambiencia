@@ -56,6 +56,9 @@ import {
 import { SceneModal } from './components/SceneModal';
 import { LibraryView } from './components/LibraryView';
 import { PlaylistEditorView } from './components/PlaylistEditorView';
+import { WalrusLogo } from './components/WalrusLogo';
+import { InteractiveBackground } from './components/InteractiveBackground';
+import { AnimatedPlayButton } from './components/AnimatedPlayButton';
 
 function formatTime(sec: number): string {
   if (!Number.isFinite(sec) || sec < 0) return '0:00';
@@ -840,7 +843,9 @@ export const App: React.FC = () => {
     null;
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#0B0E14] text-slate-100 select-none">
+    <div className="h-screen flex flex-col bg-[#0e0e0e] text-[#f0f4f5] select-none font-sans relative overflow-hidden">
+      {/* Escannord Hard-Rabbit-4 Reactive Dotted Background */}
+      <InteractiveBackground />
       {/* Hidden Dual-Deck HTML5 Audio Elements + Ambient Loop Element */}
       <audio
         ref={deckARef}
@@ -863,46 +868,56 @@ export const App: React.FC = () => {
       <audio ref={ambientAudioRef} preload="auto" loop />
 
       {/* Top Navigation & Live Room Bar */}
-      <header className="sticky top-0 z-30 border-b border-slate-800/80 bg-[#0E131C]/95 backdrop-blur-md px-4 lg:px-6 py-3">
+      <header className="sticky top-0 z-30 border-b border-[#24242b] bg-[#0e0e0e]/95 backdrop-blur-md px-4 lg:px-6 py-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           {/* Brand & Mobile Menu Toggle */}
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="lg:hidden rounded-xl border border-slate-800 bg-slate-900 p-2 text-slate-300 hover:text-white"
-              title="Abrir menu de playlists"
-            >
-              {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-            </button>
+            {isHost && (
+              <button
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                className="taste-btn lg:hidden rounded-lg border border-[#2a2a33] bg-[#141417] p-2 text-[#f0f4f5] hover:bg-[#23232a]"
+                title={sidebarOpen ? 'Fechar menu lateral' : 'Abrir menu de playlists'}
+              >
+                {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              </button>
+            )}
 
             <div
               onClick={() => setViewMode(isHost ? 'scenes' : 'listener')}
-              className="flex items-center gap-2.5 cursor-pointer"
+              className="flex items-center gap-3 cursor-pointer group"
             >
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shadow-lg shadow-amber-500/20 text-slate-950 font-bold text-lg">
-                🕯️
+              <div className="taste-btn group-hover:scale-105 transition flex items-center justify-center">
+                <WalrusLogo size={36} />
               </div>
               <div>
-                <h1 className="font-display text-lg font-bold tracking-wide text-slate-100 leading-none">
-                  AMBIÊNCIA
-                </h1>
-                <span className="text-[11px] text-slate-400">
-                  Trilhas Sonoras & Cenas Ao Vivo
+                <div className="flex items-center gap-2">
+                  <h1 className="font-sans text-base font-extrabold tracking-tight text-[#f0f4f5] leading-none">
+                    AMBIÊNCIA
+                  </h1>
+                  {/* Micro color dots badge from reference image */}
+                  <div className="flex items-center gap-1 bg-[#1a1a1f] px-1.5 py-0.5 rounded-full border border-[#2a2a33]">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#f59e0b]"></span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#2563eb]"></span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#cc001e]"></span>
+                  </div>
+                </div>
+                <span className="text-[10px] font-mono text-[#cbd5e1] tracking-wide">
+                  Design Edge Audio Engine
                 </span>
               </div>
             </div>
           </div>
 
           {/* Center View Switcher Tabs */}
-          <nav className="flex items-center gap-1 rounded-xl bg-slate-900/90 p-1 border border-slate-800">
+          <nav className="flex items-center gap-1 rounded-lg bg-[#141417] p-1 border border-[#2a2a33]">
             {isHost && (
               <>
                 <button
                   onClick={() => setViewMode('scenes')}
-                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                  className={`taste-btn flex items-center gap-1.5 rounded-md px-3.5 py-1.5 text-xs font-bold transition ${
                     viewMode === 'scenes'
-                      ? 'bg-amber-500 text-slate-950 font-semibold shadow'
-                      : 'text-slate-300 hover:text-white'
+                      ? 'bg-[#cc001e] text-white shadow-brand-glow-sm'
+                      : 'text-[#f0f4f5] bg-[#1a1a1f] hover:bg-[#25252d]'
                   }`}
                 >
                   <Sparkles className="w-3.5 h-3.5" />
@@ -911,10 +926,10 @@ export const App: React.FC = () => {
 
                 <button
                   onClick={() => setViewMode('playlist')}
-                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                  className={`taste-btn flex items-center gap-1.5 rounded-md px-3.5 py-1.5 text-xs font-bold transition ${
                     viewMode === 'playlist'
-                      ? 'bg-amber-500 text-slate-950 font-semibold shadow'
-                      : 'text-slate-300 hover:text-white'
+                      ? 'bg-[#cc001e] text-white shadow-brand-glow-sm'
+                      : 'text-[#f0f4f5] bg-[#1a1a1f] hover:bg-[#25252d]'
                   }`}
                 >
                   <ListMusic className="w-3.5 h-3.5" />
@@ -923,10 +938,10 @@ export const App: React.FC = () => {
 
                 <button
                   onClick={() => setViewMode('library')}
-                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                  className={`taste-btn flex items-center gap-1.5 rounded-md px-3.5 py-1.5 text-xs font-bold transition ${
                     viewMode === 'library'
-                      ? 'bg-amber-500 text-slate-950 font-semibold shadow'
-                      : 'text-slate-300 hover:text-white'
+                      ? 'bg-[#cc001e] text-white shadow-brand-glow-sm'
+                      : 'text-[#f0f4f5] bg-[#1a1a1f] hover:bg-[#25252d]'
                   }`}
                 >
                   <Library className="w-3.5 h-3.5" />
@@ -937,13 +952,13 @@ export const App: React.FC = () => {
 
             <button
               onClick={() => setViewMode('listener')}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+              className={`taste-btn flex items-center gap-1.5 rounded-md px-3.5 py-1.5 text-xs font-bold transition ${
                 viewMode === 'listener'
-                  ? 'bg-teal-400 text-slate-950 font-semibold shadow'
-                  : 'text-slate-300 hover:text-white'
+                  ? 'bg-[#f0f4f5] text-[#0e0e0e] shadow-sm'
+                  : 'text-[#f0f4f5] bg-[#1a1a1f] hover:bg-[#25252d]'
               }`}
             >
-              <Headphones className="w-3.5 h-3.5" />
+              <Headphones className="w-3.5 h-3.5 text-[#cc001e]" />
               <span>Modo Ouvinte</span>
             </button>
           </nav>
@@ -952,12 +967,12 @@ export const App: React.FC = () => {
           <div className="flex flex-wrap items-center gap-2">
             {/* Connection Status Pill */}
             <div
-              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium border ${
+              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold border ${
                 connStatus === 'connected'
                   ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
                   : connStatus === 'reconnecting'
-                  ? 'border-amber-500/30 bg-amber-500/10 text-amber-300'
-                  : 'border-red-500/30 bg-red-500/10 text-red-300'
+                  ? 'border-[#f59e0b]/30 bg-[#f59e0b]/10 text-[#f59e0b]'
+                  : 'border-[#cc001e]/30 bg-[#cc001e]/10 text-[#cc001e]'
               }`}
             >
               {connStatus === 'connected' ? (
@@ -969,7 +984,7 @@ export const App: React.FC = () => {
               )}
               <span>
                 {connStatus === 'connected'
-                  ? 'Conectado'
+                  ? 'Sincronizado'
                   : connStatus === 'reconnecting'
                   ? 'Reconectando...'
                   : 'Desconectado'}
@@ -978,24 +993,24 @@ export const App: React.FC = () => {
 
             {/* Listener Count Pill */}
             <div
-              className="inline-flex items-center gap-1.5 rounded-full border border-slate-700/80 bg-slate-900 px-2.5 py-1 text-xs text-slate-200"
-              title="Pessoas conectadas nesta sala em tempo real"
+              className="inline-flex items-center gap-1.5 rounded-full border border-[#2a2a33] bg-[#141417] px-3 py-1 text-xs text-[#f0f4f5]"
+              title="Ouvintes conectados nesta sala em tempo real"
             >
-              <Users className="w-3.5 h-3.5 text-teal-400" />
-              <span className="font-mono font-semibold">{listenerCount}</span>
-              <span className="hidden sm:inline text-slate-400 text-[11px]">
+              <Users className="w-3.5 h-3.5 text-[#cc001e]" />
+              <span className="font-mono font-bold">{listenerCount}</span>
+              <span className="hidden sm:inline text-[#cbd5e1] text-[11px]">
                 {listenerCount === 1 ? 'ouvinte' : 'ouvintes'}
               </span>
             </div>
 
             {/* Room Code & Share Link */}
-            <div className="flex items-center rounded-xl border border-slate-700/80 bg-slate-900/90 overflow-hidden">
-              <span className="px-2.5 py-1 text-xs font-mono font-bold text-amber-400 tracking-wider">
+            <div className="flex items-center rounded-lg border border-[#2a2a33] bg-[#141417] overflow-hidden">
+              <span className="px-3 py-1 text-xs font-mono font-bold text-[#cc001e] tracking-wider">
                 /sala/{roomCode}
               </span>
               <button
                 onClick={handleCopyShareLink}
-                className="border-l border-slate-800 px-2.5 py-1 text-xs text-slate-200 hover:bg-amber-500 hover:text-slate-950 transition flex items-center gap-1"
+                className="taste-btn border-l border-[#2a2a33] px-3 py-1 text-xs text-[#f0f4f5] hover:bg-[#cc001e] hover:text-white transition flex items-center gap-1.5"
                 title="Copiar link para ouvintes"
               >
                 {copiedLink ? (
@@ -1005,7 +1020,7 @@ export const App: React.FC = () => {
                   </>
                 ) : (
                   <>
-                    <Share2 className="w-3.5 h-3.5" />
+                    <Share2 className="w-3.5 h-3.5 text-[#cc001e]" />
                     <span className="hidden sm:inline">Compartilhar</span>
                   </>
                 )}
@@ -1015,7 +1030,7 @@ export const App: React.FC = () => {
             {isHost && (
               <button
                 onClick={handleCreateNewRoom}
-                className="rounded-xl border border-slate-700 bg-slate-900 hover:bg-slate-800 px-2.5 py-1 text-xs text-slate-300"
+                className="taste-btn rounded-lg border border-[#2a2a33] bg-[#141417] hover:bg-[#23232a] px-3 py-1 text-xs text-[#cbd5e1] hover:text-[#f0f4f5]"
                 title="Gerar nova sala com código curto"
               >
                 + Nova Sala
@@ -1032,10 +1047,10 @@ export const App: React.FC = () => {
                   setAuthModalOpen(true);
                 }
               }}
-              className={`inline-flex items-center gap-1.5 rounded-xl px-2.5 py-1 text-xs font-medium border transition ${
+              className={`taste-btn inline-flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-semibold border transition ${
                 isHost
-                  ? 'border-amber-500/40 bg-amber-500/15 text-amber-300'
-                  : 'border-slate-700 bg-slate-900 text-slate-400 hover:text-white'
+                  ? 'border-[#cc001e] bg-[#cc001e]/15 text-white shadow-brand-glow-sm'
+                  : 'border-[#2a2a33] bg-[#141417] text-[#cbd5e1] hover:text-[#f0f4f5] hover:border-[#3d3d47]'
               }`}
               title={
                 isHost
@@ -1045,13 +1060,13 @@ export const App: React.FC = () => {
             >
               {isHost ? (
                 <>
-                  <Unlock className="w-3.5 h-3.5" />
-                  <span className="hidden md:inline">Anfitrião</span>
+                  <Unlock className="w-3.5 h-3.5 text-[#cc001e]" />
+                  <span className="hidden md:inline">Anfitrião Ativo</span>
                 </>
               ) : (
                 <>
-                  <Lock className="w-3.5 h-3.5" />
-                  <span className="hidden md:inline">Sou o Anfitrião</span>
+                  <Lock className="w-3.5 h-3.5 text-[#cbd5e1]" />
+                  <span className="hidden md:inline">Painel do Mestre</span>
                 </>
               )}
             </button>
@@ -1059,25 +1074,52 @@ export const App: React.FC = () => {
         </div>
       </header>
 
-      {/* Main Middle Layout: Left Sidebar (Playlists & Ambient Mixer) + Central Workspace */}
-      <div className="flex-1 flex overflow-hidden pb-28">
-        {/* Left Sidebar (Hidden in pure listener view unless host) */}
+      {/* Main Middle Layout */}
+      <div className="flex-1 flex min-h-0 overflow-hidden relative z-10">
+        {/* Left Sidebar Overlay & Adaptive Docked Panel */}
         {isHost && (
-          <aside
-            className={`${
-              sidebarOpen ? 'fixed inset-y-0 left-0 z-40 w-72 pt-16' : 'hidden'
-            } lg: static lg:block lg:w-72 shrink-0 border-r border-slate-800/80 bg-[#0E131C] p-4 overflow-y-auto space-y-6`}
-          >
+          <>
+            {/* Mobile / Tablet Backdrop */}
+            {sidebarOpen && (
+              <div
+                onClick={() => setSidebarOpen(false)}
+                className="fixed inset-0 bg-black/80 backdrop-blur-sm z-40 lg:hidden animate-in fade-in duration-200"
+                aria-hidden="true"
+              />
+            )}
+
+            <aside
+              className={`
+                fixed inset-y-0 left-0 z-50 w-72 sm:w-80 bg-[#0e0e0e] border-r border-[#24242b] p-4 pb-28 lg:pb-32 overflow-y-auto space-y-6 shadow-2xl transition-transform duration-300 ease-in-out
+                ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+                lg:translate-x-0 lg:static lg:block lg:shadow-none lg:z-auto lg:h-full
+                lg:w-64 xl:w-72 2xl:w-80 shrink-0
+              `}
+            >
+              {/* Mobile Drawer Header */}
+              <div className="flex lg:hidden items-center justify-between pb-3 border-b border-[#24242b]">
+                <div className="flex items-center gap-2.5">
+                  <WalrusLogo size={28} />
+                  <span className="font-sans text-xs font-extrabold text-[#f0f4f5]">Menu do Mestre</span>
+                </div>
+                <button
+                  onClick={() => setSidebarOpen(false)}
+                  className="taste-btn p-1.5 rounded-lg bg-[#1a1a1f] text-[#f0f4f5] hover:bg-[#25252d]"
+                  title="Fechar menu lateral"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             {/* Playlists Section */}
             <div>
               <div className="flex items-center justify-between mb-3">
-                <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                  <ListMusic className="w-4 h-4 text-amber-400" />
+                <h2 className="text-[11px] font-bold uppercase tracking-wider text-[#cbd5e1] flex items-center gap-1.5">
+                  <ListMusic className="w-4 h-4 text-[#cc001e]" />
                   <span>Playlists ({playlists.length})</span>
                 </h2>
                 <button
                   onClick={() => setCreatingPlaylist(!creatingPlaylist)}
-                  className="rounded-lg bg-amber-500/15 border border-amber-500/30 px-2 py-1 text-xs text-amber-300 hover:bg-amber-500 hover:text-slate-950 transition flex items-center gap-1"
+                  className="taste-btn rounded-md bg-[#cc001e]/15 border border-[#cc001e]/30 px-2.5 py-1 text-xs font-bold text-[#cc001e] hover:bg-[#cc001e] hover:text-white transition flex items-center gap-1"
                 >
                   <Plus className="w-3.5 h-3.5" /> Nova
                 </button>
@@ -1090,12 +1132,12 @@ export const App: React.FC = () => {
                     value={newPlaylistName}
                     onChange={(e) => setNewPlaylistName(e.target.value)}
                     placeholder="Nome da playlist..."
-                    className="flex-1 rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-xs text-white focus:border-amber-500 focus:outline-none"
+                    className="flex-1 rounded-md border border-[#2a2a33] bg-[#141417] px-3 py-1.5 text-xs text-[#f0f4f5] focus:border-[#cc001e] focus:outline-none"
                     autoFocus
                   />
                   <button
                     type="submit"
-                    className="rounded-lg bg-amber-500 px-2.5 py-1.5 text-xs font-semibold text-slate-950"
+                    className="taste-btn rounded-md bg-[#cc001e] px-3 py-1.5 text-xs font-bold text-white shadow-brand-glow-sm"
                   >
                     Criar
                   </button>
@@ -1116,22 +1158,22 @@ export const App: React.FC = () => {
                         setViewMode('playlist');
                         setSidebarOpen(false);
                       }}
-                      className={`group rounded-xl border px-3 py-2.5 cursor-pointer transition flex items-center justify-between gap-2 ${
+                      className={`taste-card group rounded-lg border px-3.5 py-2.5 cursor-pointer transition flex items-center justify-between gap-2 ${
                         isSelected
-                          ? 'border-amber-500/60 bg-amber-500/15 text-white'
+                          ? 'border-[#cc001e] bg-[#cc001e]/15 text-white shadow-brand-glow-sm'
                           : isPlayingPl
-                          ? 'border-amber-500/30 bg-slate-900/90 text-amber-200'
-                          : 'border-transparent bg-slate-900/50 hover:bg-slate-800/80 text-slate-300'
+                          ? 'border-[#cc001e]/50 bg-[#141417] text-[#f0f4f5]'
+                          : 'border-[#24242b] bg-[#141417] hover:bg-[#1f1f26] text-[#f0f4f5]'
                       }`}
                     >
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
                           {isPlayingPl && (
-                            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0" />
+                            <span className="w-2 h-2 rounded-full bg-[#cc001e] animate-pulse shrink-0" />
                           )}
-                          <p className="text-xs font-semibold truncate">{pl.name}</p>
+                          <p className="text-xs font-bold truncate text-[#f0f4f5]">{pl.name}</p>
                         </div>
-                        <p className="text-[11px] text-slate-500 mt-0.5">
+                        <p className="text-[10px] font-mono text-[#cbd5e1] mt-0.5">
                           {pl.tracks.length} {pl.tracks.length === 1 ? 'faixa' : 'faixas'}
                         </p>
                       </div>
@@ -1142,10 +1184,10 @@ export const App: React.FC = () => {
                           setListenerUnlocked(true);
                           sendHostCommand('set_playlist', { playlistId: pl.id });
                         }}
-                        className="opacity-80 group-hover:opacity-100 w-7 h-7 rounded-lg bg-slate-800 hover:bg-amber-500 hover:text-slate-950 flex items-center justify-center text-slate-300 transition shrink-0"
+                        className="opacity-100 w-7 h-7 rounded-md bg-[#23232a] hover:bg-[#cc001e] hover:text-white flex items-center justify-center text-[#cbd5e1] transition shrink-0"
                         title="Tocar esta playlist na sala"
                       >
-                        <Play className="w-3.5 h-3.5 fill-current" />
+                        <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
                       </button>
                     </div>
                   );
@@ -1154,10 +1196,10 @@ export const App: React.FC = () => {
             </div>
 
             {/* Ambient Sound Layer Mixer */}
-            <div className="rounded-2xl border border-slate-800 bg-[#121824] p-3.5 space-y-3">
+            <div className="taste-card rounded-md border border-[#2a2a33] bg-[#141417] p-4 space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold uppercase tracking-wider text-teal-400 flex items-center gap-1.5">
-                  <CloudRain className="w-4 h-4" />
+                <span className="text-[11px] font-bold uppercase tracking-wider text-[#cc001e] flex items-center gap-1.5">
+                  <CloudRain className="w-4 h-4 text-[#cc001e]" />
                   Camada Ambiente (Loop)
                 </span>
                 <button
@@ -1168,13 +1210,13 @@ export const App: React.FC = () => {
                     });
                   }}
                   disabled={!roomState?.ambientTrack}
-                  className={`px-2 py-0.5 rounded-full text-[11px] font-semibold transition ${
+                  className={`taste-btn px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition ${
                     roomState?.ambientIsPlaying
-                      ? 'bg-teal-400 text-slate-950'
-                      : 'bg-slate-800 text-slate-400 hover:text-white disabled:opacity-40'
+                      ? 'bg-[#cc001e] text-white shadow-brand-glow-sm'
+                      : 'bg-[#23232a] text-[#cbd5e1] hover:text-white disabled:opacity-40'
                   }`}
                 >
-                  {roomState?.ambientIsPlaying ? 'Ativo' : 'Pausado'}
+                  {roomState?.ambientIsPlaying ? 'Ativo' : 'Pausa'}
                 </button>
               </div>
 
@@ -1188,7 +1230,7 @@ export const App: React.FC = () => {
                     ambientIsPlaying: Boolean(val),
                   });
                 }}
-                className="w-full rounded-xl border border-slate-700 bg-slate-900 px-2.5 py-2 text-xs text-slate-200 focus:border-teal-400 focus:outline-none"
+                className="w-full rounded-lg border border-[#2a2a33] bg-[#0e0e0e] px-3 py-2 text-xs text-[#f0f4f5] focus:border-[#cc001e] focus:outline-none"
               >
                 <option value="">-- Nenhum som ambiente --</option>
                 {tracks
@@ -1201,10 +1243,10 @@ export const App: React.FC = () => {
                   ))}
               </select>
 
-              <div className="space-y-1">
-                <div className="flex items-center justify-between text-[11px] text-slate-400">
-                  <span>Volume do Ambiente</span>
-                  <span className="font-mono text-teal-300">
+              <div className="space-y-1 pt-1">
+                <div className="flex items-center justify-between text-[11px] text-[#cbd5e1]">
+                  <span>Volume Ambiente</span>
+                  <span className="font-mono text-[#f0f4f5]">
                     {Math.round((roomState?.ambientVolume ?? 0.35) * 100)}%
                   </span>
                 </div>
@@ -1219,19 +1261,19 @@ export const App: React.FC = () => {
                       ambientVolume: parseFloat(e.target.value),
                     })
                   }
-                  className="w-full accent-teal-400 cursor-pointer"
+                  className="w-full accent-[#cc001e] cursor-pointer"
                 />
               </div>
             </div>
 
             {/* Crossfade Configuration Card */}
-            <div className="rounded-2xl border border-slate-800 bg-[#121824] p-3.5 space-y-2">
+            <div className="taste-card rounded-md border border-[#2a2a33] bg-[#141417] p-4 space-y-2.5">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-[#cc001e] flex items-center gap-1.5">
                   <Sliders className="w-3.5 h-3.5" />
                   Crossfade MP3
                 </span>
-                <span className="text-xs font-mono font-bold text-slate-200">
+                <span className="text-xs font-mono font-bold text-[#f0f4f5]">
                   {roomState?.crossfadeSec ?? 3}s
                 </span>
               </div>
@@ -1246,37 +1288,38 @@ export const App: React.FC = () => {
                     crossfadeSec: parseInt(e.target.value, 10),
                   })
                 }
-                className="w-full accent-amber-400 cursor-pointer"
+                className="w-full accent-[#cc001e] cursor-pointer"
               />
-              <p className="text-[11px] text-slate-500">
-                Transição suave (fade out / fade in) entre faixas MP3 e trocas de cena.
+              <p className="text-[10px] text-[#cbd5e1] leading-relaxed">
+                Transição contínua com fade out e fade in entre faixas e cenas.
               </p>
             </div>
           </aside>
+          </>
         )}
 
         {/* Central Workspace */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto w-full">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto w-full pb-28 lg:pb-32">
           {loadingCatalog ? (
-            <div className="flex flex-col items-center justify-center py-24 text-slate-400 gap-3">
-              <RefreshCw className="w-7 h-7 animate-spin text-amber-400" />
-              <p className="text-sm">Carregando estúdio Ambiência...</p>
+            <div className="flex flex-col items-center justify-center py-24 text-[#cbd5e1] gap-3">
+              <RefreshCw className="w-8 h-8 animate-spin text-[#cc001e]" />
+              <p className="text-sm font-semibold">Carregando estúdio Ambiência...</p>
             </div>
           ) : viewMode === 'scenes' && isHost ? (
             /* ==================== SCENE PAD VIEW ==================== */
             <div className="space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                  <h2 className="font-display text-2xl font-bold text-slate-100 flex items-center gap-2.5">
+                  <h2 className="font-sans text-2xl font-extrabold tracking-tight text-[#f0f4f5] flex items-center gap-3">
                     <span>Painel de Cenas (Situações)</span>
                     {isCrossfading && (
-                      <span className="text-xs font-sans font-normal rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300 px-3 py-0.5 animate-pulse">
-                        Crossfade em andamento...
+                      <span className="text-xs font-mono rounded-full bg-[#cc001e]/20 border border-[#cc001e]/40 text-[#f0f4f5] px-3 py-0.5 animate-pulse">
+                        Crossfade ativo...
                       </span>
                     )}
                   </h2>
-                  <p className="text-xs text-slate-400 mt-1">
-                    Clique em um botão ou pressione as teclas <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 font-mono text-slate-200">1</kbd> a <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 font-mono text-slate-200">9</kbd> para trocar a trilha com fade suave.
+                  <p className="text-xs text-[#cbd5e1] mt-1">
+                    Dispare cenas instantaneamente no clique ou teclas <kbd className="px-2 py-0.5 rounded-lg bg-[#1a1a1f] border border-[#2a2a33] font-mono text-[#f0f4f5]">1</kbd> a <kbd className="px-2 py-0.5 rounded-lg bg-[#1a1a1f] border border-[#2a2a33] font-mono text-[#f0f4f5]">9</kbd>.
                   </p>
                 </div>
 
@@ -1285,7 +1328,7 @@ export const App: React.FC = () => {
                     setEditingScene(null);
                     setSceneModalOpen(true);
                   }}
-                  className="inline-flex items-center gap-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold px-4 py-2.5 text-xs shadow-lg shadow-amber-500/15 transition self-start sm:self-auto"
+                  className="taste-btn inline-flex items-center gap-2 rounded-lg bg-[#cc001e] hover:bg-[#e00022] text-white font-bold px-5 py-2.5 text-xs shadow-brand-glow transition self-start sm:self-auto"
                 >
                   <Plus className="w-4 h-4" />
                   Novo Botão de Cena
@@ -1293,13 +1336,13 @@ export const App: React.FC = () => {
               </div>
 
               {scenes.length === 0 ? (
-                <div className="rounded-2xl border border-slate-800 bg-[#121722]/50 p-12 text-center">
-                  <Sparkles className="w-8 h-8 text-amber-400 mx-auto mb-2" />
-                  <p className="text-sm text-slate-200 font-semibold">
-                    Nenhum botão de cena criado
+                <div className="rounded-md border border-[#2a2a33] bg-[#141417]/50 p-12 text-center">
+                  <Sparkles className="w-8 h-8 text-[#cc001e] mx-auto mb-2" />
+                  <p className="text-sm text-[#f0f4f5] font-bold">
+                    Nenhum botão de cena cadastrado
                   </p>
-                  <p className="text-xs text-slate-400 mt-1">
-                    Crie botões como 🌲 Floresta, ⚔️ Batalha ou 🏰 Taverna para disparar suas playlists.
+                  <p className="text-xs text-[#cbd5e1] mt-1">
+                    Crie botões como 🌲 Floresta, ⚔️ Batalha ou 🏰 Taverna para engajar sua mesa.
                   </p>
                 </div>
               ) : (
@@ -1320,54 +1363,52 @@ export const App: React.FC = () => {
                           sendHostCommand('trigger_scene', { sceneId: scene.id });
                         }}
                         style={{
-                          borderColor: isSelectedScene ? scene.color : undefined,
+                          borderColor: isSelectedScene ? '#cc001e' : undefined,
                           boxShadow: isActive
-                            ? `0 0 28px -4px ${scene.color}55`
+                            ? `0 0 32px -4px rgba(204, 0, 30, 0.6)`
                             : undefined,
                         }}
-                        className={`group relative rounded-2xl border-2 p-5 cursor-pointer transition-all duration-300 overflow-hidden ${
-                          isSelectedScene
-                            ? 'bg-[#171E2E]'
-                            : 'border-slate-800/90 bg-[#121722]/90 hover:border-slate-700 hover:bg-[#151B28]'
+                        className={`taste-card group relative rounded-md border-2 p-5 cursor-pointer transition-all duration-200 overflow-hidden ${
+                          isActive
+                            ? 'bg-[#1b1417] border-[#cc001e] scene-active-glow'
+                            : isSelectedScene
+                            ? 'bg-[#181518] border-[#cc001e]'
+                            : 'border-[#24242b] bg-[#141417] hover:border-[#3d3d47] hover:bg-[#19191e]'
                         }`}
                       >
-                        {/* Colored radial spotlight */}
+                        {/* Subtle red spotlight glow */}
                         <div
-                          className="pointer-events-none absolute -right-8 -top-8 w-32 h-32 rounded-full blur-2xl opacity-25 transition group-hover:opacity-45"
-                          style={{ backgroundColor: scene.color }}
+                          className="pointer-events-none absolute -right-6 -top-6 w-32 h-32 rounded-full blur-2xl opacity-20 group-hover:opacity-35 transition"
+                          style={{ backgroundColor: scene.color || '#cc001e' }}
                         />
 
                         <div className="relative z-10 flex items-start justify-between gap-2">
                           <div className="flex items-center gap-3.5">
                             <div
-                              className={`w-14 h-14 rounded-2xl flex items-center justify-center text-3xl shadow-inner border border-white/10 ${
-                                isActive ? 'scene-active-glow' : ''
-                              }`}
-                              style={{ backgroundColor: `${scene.color}28` }}
+                              className="w-14 h-14 rounded-lg flex items-center justify-center text-3xl shadow-inner border border-white/10 bg-[#0e0e0e]"
                             >
                               {scene.emoji}
                             </div>
                             <div>
                               <div className="flex items-center gap-2">
-                                <h3 className="font-display text-lg font-bold text-white">
+                                <h3 className="font-sans text-base font-extrabold text-[#f0f4f5]">
                                   {scene.name}
                                 </h3>
                                 {isActive && (
                                   <span
-                                    className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider text-slate-950"
-                                    style={{ backgroundColor: scene.color }}
+                                    className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-[#cc001e] text-white shadow-brand-glow-sm"
                                   >
                                     No Ar
                                   </span>
                                 )}
                               </div>
-                              <p className="text-xs text-slate-400 mt-0.5 truncate max-w-[180px]">
+                              <p className="text-xs text-[#cbd5e1] mt-0.5 truncate max-w-[180px]">
                                 {linkedPlaylist
                                   ? `🎵 ${linkedPlaylist.name}`
                                   : 'Sem playlist associada'}
                               </p>
                               {linkedAmbient && (
-                                <p className="text-[11px] text-teal-400 mt-0.5 truncate max-w-[180px]">
+                                <p className="text-[11px] text-[#cc001e] mt-0.5 truncate max-w-[180px] font-medium">
                                   🌧️ + {linkedAmbient.title}
                                 </p>
                               )}
@@ -1377,15 +1418,15 @@ export const App: React.FC = () => {
                           <div className="flex flex-col items-end gap-2">
                             {shortcut && (
                               <span
-                                className="w-6 h-6 rounded-lg border border-slate-700 bg-slate-900/90 text-[11px] font-mono font-bold text-slate-300 flex items-center justify-center"
-                                title={`Atalho de teclado: Tecla ${shortcut}`}
+                                className="w-7 h-7 rounded-md border border-[#2a2a33] bg-[#0e0e0e] text-xs font-mono font-bold text-[#f0f4f5] flex items-center justify-center shadow-sm"
+                                title={`Atalho: Tecla ${shortcut}`}
                               >
                                 {shortcut}
                               </span>
                             )}
 
                             <div
-                              className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition"
+                              className="flex items-center gap-1 opacity-100 transition"
                               onClick={(e) => e.stopPropagation()}
                             >
                               <button
@@ -1393,7 +1434,7 @@ export const App: React.FC = () => {
                                   setEditingScene(scene);
                                   setSceneModalOpen(true);
                                 }}
-                                className="p-1.5 rounded-lg bg-slate-900/90 text-slate-300 hover:text-white border border-slate-700"
+                                className="taste-btn p-1.5 rounded-md bg-[#0e0e0e] text-[#cbd5e1] hover:text-[#f0f4f5] border border-[#2a2a33]"
                                 title="Editar cena"
                               >
                                 <Edit3 className="w-3.5 h-3.5" />
@@ -1407,7 +1448,7 @@ export const App: React.FC = () => {
                                     await refreshCatalog();
                                   }
                                 }}
-                                className="p-1.5 rounded-lg bg-slate-900/90 text-red-300 hover:bg-red-500/20 border border-slate-700"
+                                className="taste-btn p-1.5 rounded-md bg-[#0e0e0e] text-[#cc001e] hover:bg-[#cc001e]/20 border border-[#2a2a33]"
                                 title="Excluir cena"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -1423,10 +1464,10 @@ export const App: React.FC = () => {
 
               {/* Current Queue Quick View */}
               {roomState && roomState.queue.length > 0 && (
-                <div className="rounded-2xl border border-slate-800/90 bg-[#121722]/75 p-5 space-y-3">
+                <div className="taste-card rounded-md border border-[#2a2a33] bg-[#141417] p-5 space-y-3">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                      Fila da Cena / Playlist Atual ({roomState.queue.length} faixas)
+                    <h3 className="text-[11px] font-bold uppercase tracking-wider text-[#cbd5e1]">
+                      Fila da Playlist Atual ({roomState.queue.length} faixas)
                     </h3>
                     {activePlaylist && (
                       <button
@@ -1434,7 +1475,7 @@ export const App: React.FC = () => {
                           setSelectedPlaylistId(activePlaylist.id);
                           setViewMode('playlist');
                         }}
-                        className="text-xs text-amber-400 hover:underline"
+                        className="text-xs font-semibold text-[#cc001e] hover:underline"
                       >
                         Editar ou reordenar playlist →
                       </button>
@@ -1451,21 +1492,21 @@ export const App: React.FC = () => {
                             setListenerUnlocked(true);
                             sendHostCommand('set_track', { trackId: track.id });
                           }}
-                          className={`flex items-center justify-between gap-3 rounded-xl border px-3.5 py-2.5 cursor-pointer transition ${
+                          className={`taste-card flex items-center justify-between gap-3 rounded-lg border px-3.5 py-2.5 cursor-pointer transition ${
                             isCurrent
-                              ? 'border-amber-500/60 bg-amber-500/15 text-amber-200'
-                              : 'border-slate-800/80 bg-slate-900/60 hover:bg-slate-800/80 text-slate-300'
+                              ? 'border-[#cc001e] bg-[#cc001e]/15 text-[#f0f4f5] shadow-brand-glow-sm'
+                              : 'border-[#24242b] bg-[#0e0e0e] hover:border-[#383842] text-[#cbd5e1]'
                           }`}
                         >
                           <div className="flex items-center gap-2.5 min-w-0">
-                            <span className="text-xs font-mono text-slate-500 w-5">
+                            <span className="text-xs font-mono text-[#5a5a66] w-5">
                               {i + 1}.
                             </span>
-                            <span className="text-xs font-medium truncate">
+                            <span className="text-xs font-semibold truncate text-[#f0f4f5]">
                               {track.title}
                             </span>
                           </div>
-                          <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-slate-800 text-slate-400 shrink-0">
+                          <span className="text-[9px] font-mono uppercase px-2 py-0.5 rounded-full bg-[#1a1a1f] border border-[#2a2a33] text-[#cbd5e1] shrink-0">
                             {track.sourceType}
                           </span>
                         </div>
@@ -1510,12 +1551,12 @@ export const App: React.FC = () => {
             /* ==================== LIVE LISTENER MODE (/sala/:code) ==================== */
             <div className="max-w-xl mx-auto py-6 space-y-6">
               {/* Room Switcher Card */}
-              <div className="rounded-2xl border border-slate-800 bg-[#121722] p-5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+              <div className="taste-card rounded-md border border-[#2a2a33] bg-[#141417] p-5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shadow-card-elevated">
                 <div>
-                  <span className="text-[11px] font-mono uppercase tracking-wider text-teal-400">
+                  <span className="text-[10px] font-mono uppercase tracking-wider text-[#cc001e] font-bold">
                     Sincronização em Tempo Real
                   </span>
-                  <h2 className="font-display text-xl font-bold text-white">
+                  <h2 className="font-sans text-xl font-extrabold text-[#f0f4f5]">
                     {roomState?.name || `Sala ${roomCode}`}
                   </h2>
                 </div>
@@ -1537,140 +1578,148 @@ export const App: React.FC = () => {
                     onChange={(e) => setJoinCodeInput(e.target.value.toUpperCase())}
                     placeholder="Código (ex: AB12CD)"
                     maxLength={10}
-                    className="w-32 rounded-xl border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-mono uppercase text-amber-300 focus:border-teal-400 focus:outline-none"
+                    className="w-32 rounded-lg border border-[#2a2a33] bg-[#0e0e0e] px-3.5 py-1.5 text-xs font-mono uppercase text-[#f0f4f5] focus:border-[#cc001e] focus:outline-none"
                   />
                   <button
                     type="submit"
-                    className="rounded-xl bg-slate-800 hover:bg-slate-700 px-3 py-1.5 text-xs font-medium text-slate-200"
+                    className="taste-btn rounded-lg bg-[#23232a] hover:bg-[#cc001e] hover:text-white px-3.5 py-1.5 text-xs font-bold text-[#f0f4f5]"
                   >
                     Trocar Sala
                   </button>
                 </form>
               </div>
 
-              {/* "Entrar e Ouvir" Autoplay Unlock Card */}
+              {/* Three-Card Visual Hierarchy inspired by Reference Image */}
               {!listenerUnlocked ? (
-                <div className="rounded-3xl border-2 border-teal-500/50 bg-gradient-to-b from-teal-500/15 to-[#121722] p-10 text-center space-y-5 shadow-2xl">
-                  <div className="w-20 h-20 rounded-3xl bg-teal-500/20 border border-teal-400/40 flex items-center justify-center mx-auto text-teal-300">
-                    <Headphones className="w-10 h-10" />
+                /* Card 1: Red #cc001e "Aa" unlock card */
+                <div className="rounded-md border border-[#cc001e]/60 bg-[#cc001e] p-8 text-white space-y-6 shadow-brand-glow text-center">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-mono uppercase tracking-widest text-white/80">
+                      Hex #cc001e
+                    </span>
+                    <span className="text-3xl font-black">Aa</span>
                   </div>
                   <div className="space-y-2">
-                    <h3 className="font-display text-2xl font-bold text-white">
-                      Pronto para sintonizar a sessão?
+                    <h3 className="font-sans text-2xl font-black tracking-tight">
+                      Pronto para entrar na sessão?
                     </h3>
-                    <p className="text-sm text-slate-300 max-w-md mx-auto">
-                      Clique no botão abaixo para liberar a reprodução de áudio no navegador e ouvir em perfeita sincronia com o anfitrião.
+                    <p className="text-xs text-white/90 max-w-sm mx-auto leading-relaxed">
+                      Clique no botão para desbloquear o áudio do navegador e escutar todas as cenas e músicas em perfeita sincronia com o anfitrião.
                     </p>
                   </div>
                   <button
                     onClick={handleUnlockListenerAudio}
-                    className="inline-flex items-center gap-2.5 rounded-2xl bg-teal-400 hover:bg-teal-300 text-slate-950 font-bold px-8 py-4 text-base shadow-xl shadow-teal-500/25 transition transform hover:scale-105"
+                    className="taste-btn inline-flex items-center gap-3 rounded-lg bg-[#f0f4f5] hover:bg-white text-[#0e0e0e] font-extrabold px-8 py-3.5 text-sm shadow-xl transition transform hover:scale-105"
                   >
-                    <Radio className="w-5 h-5" />
-                    Entrar e ouvir
+                    <Radio className="w-4 h-4 text-[#cc001e]" />
+                    <span>Entrar e Ouvir</span>
                   </button>
                 </div>
               ) : (
-                /* Synchronized Listener Stage */
-                <div className="rounded-3xl border border-slate-800 bg-gradient-to-b from-[#161D2B] to-[#101520] p-8 text-center space-y-6 shadow-2xl">
-                  {activeScene && (
-                    <div
-                      className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-semibold border"
-                      style={{
-                        borderColor: `${activeScene.color}66`,
-                        backgroundColor: `${activeScene.color}22`,
-                        color: '#f8fafc',
-                      }}
-                    >
-                      <span className="text-base">{activeScene.emoji}</span>
-                      <span>Cena Atual: {activeScene.name}</span>
-                    </div>
-                  )}
-
-                  <div className="space-y-2">
-                    <p className="text-xs uppercase tracking-widest text-slate-400">
-                      {roomState?.isPlaying ? 'Tocando Agora em Sincronia' : 'Sessão em Pausa'}
-                    </p>
-                    <h3 className="font-display text-2xl font-bold text-slate-100">
-                      {roomState?.currentTrack?.title || 'Aguardando o anfitrião iniciar uma cena...'}
-                    </h3>
-                    {roomState?.ambientIsPlaying && roomState?.ambientTrack && (
-                      <p className="text-xs text-teal-400 flex items-center justify-center gap-1.5">
-                        <CloudRain className="w-3.5 h-3.5" />
-                        <span>Camada Ambiente ativa: {roomState.ambientTrack.title}</span>
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Listener-Only Local Volume & Mute Control */}
-                  <div className="max-w-xs mx-auto rounded-2xl border border-slate-800 bg-slate-900/80 p-4 space-y-3">
-                    <div className="flex items-center justify-between text-xs text-slate-300">
-                      <span className="font-medium">Seu Volume Local</span>
-                      <span className="font-mono text-teal-300">
-                        {localMuted ? 'MUDO' : `${Math.round(localVolume * 100)}%`}
+                <div className="space-y-4">
+                  {/* Card 2: Dark #0e0e0e "Ff" current playback card */}
+                  <div className="rounded-md border border-[#2a2a33] bg-[#0e0e0e] p-7 space-y-4 shadow-card-elevated">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-mono uppercase tracking-widest text-[#cc001e] font-bold">
+                        Hex #0e0e0e
                       </span>
+                      <span className="text-3xl font-black text-[#cc001e]">Ff</span>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={() => setLocalMuted(!localMuted)}
-                        className={`p-2 rounded-xl border transition ${
-                          localMuted
-                            ? 'border-red-500/40 bg-red-500/20 text-red-300'
-                            : 'border-slate-700 bg-slate-800 text-slate-200 hover:text-white'
-                        }`}
-                        title={localMuted ? 'Ativar som' : 'Silenciar apenas para você'}
+
+                    {activeScene && (
+                      <div
+                        className="inline-flex items-center gap-2 rounded-full px-3.5 py-1 text-xs font-bold border border-[#cc001e]/40 bg-[#cc001e]/15 text-[#f0f4f5]"
                       >
-                        {localMuted ? (
-                          <VolumeX className="w-4 h-4" />
-                        ) : (
-                          <Volume2 className="w-4 h-4" />
-                        )}
-                      </button>
-                      <input
-                        type="range"
-                        min={0}
-                        max={1}
-                        step={0.02}
-                        value={localMuted ? 0 : localVolume}
-                        onChange={(e) => {
-                          setLocalMuted(false);
-                          setLocalVolume(parseFloat(e.target.value));
-                        }}
-                        className="flex-1 accent-teal-400 cursor-pointer"
-                      />
+                        <span className="text-sm">{activeScene.emoji}</span>
+                        <span>Cena Ativa: {activeScene.name}</span>
+                      </div>
+                    )}
+
+                    <div>
+                      <p className="text-[10px] uppercase font-mono tracking-widest text-[#cbd5e1]">
+                        {roomState?.isPlaying ? '● Tocando no Momento' : '■ Em Pausa'}
+                      </p>
+                      <h3 className="font-sans text-xl font-extrabold text-[#f0f4f5] mt-1">
+                        {roomState?.currentTrack?.title || 'Aguardando o anfitrião disparar uma cena...'}
+                      </h3>
+                      {roomState?.ambientIsPlaying && roomState?.ambientTrack && (
+                        <p className="text-xs text-[#cc001e] mt-1.5 font-medium flex items-center gap-1.5">
+                          <CloudRain className="w-3.5 h-3.5" />
+                          <span>Camada Ambiente: {roomState.ambientTrack.title}</span>
+                        </p>
+                      )}
                     </div>
                   </div>
 
-                  {/* Sync Telemetry Footer */}
-                  <div className="flex flex-wrap items-center justify-center gap-4 text-[11px] text-slate-400 pt-2 border-t border-slate-800/80">
-                    <span>
-                      Latência estimada:{' '}
-                      <strong className="font-mono text-slate-200">
-                        {Math.round(oneWayLatencySec * 1000)} ms
-                      </strong>
-                    </span>
-                    <span>•</span>
-                    <span>
-                      Tolerância de desvio: <strong className="font-mono text-slate-200">~1.0s</strong>
-                    </span>
-                    {lastDriftFixedMs && (
-                      <>
-                        <span>•</span>
-                        <span className="text-teal-400">Sincronia ajustada automaticamente</span>
-                      </>
-                    )}
+                  {/* Card 3: Light #f0f4f5 "Xx" volume controls & telemetry */}
+                  <div className="rounded-md border border-white/20 bg-[#f0f4f5] text-[#0e0e0e] p-7 space-y-4 shadow-xl">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-mono uppercase tracking-widest text-[#0e0e0e]/70 font-bold">
+                        Hex #f0f4f5
+                      </span>
+                      <span className="text-3xl font-black text-[#0e0e0e]">Xx</span>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between text-xs font-bold text-[#0e0e0e]">
+                        <span>Seu Volume de Ouvinte</span>
+                        <span className="font-mono">
+                          {localMuted ? 'MUDO' : `${Math.round(localVolume * 100)}%`}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => setLocalMuted(!localMuted)}
+                          className={`taste-btn p-2 rounded-md border transition ${
+                            localMuted
+                              ? 'border-[#cc001e] bg-[#cc001e] text-white'
+                              : 'border-[#0e0e0e]/20 bg-white text-[#0e0e0e]'
+                          }`}
+                          title={localMuted ? 'Desmutar' : 'Silenciar'}
+                        >
+                          {localMuted ? (
+                            <VolumeX className="w-4 h-4" />
+                          ) : (
+                            <Volume2 className="w-4 h-4" />
+                          )}
+                        </button>
+                        <input
+                          type="range"
+                          min={0}
+                          max={1}
+                          step={0.02}
+                          value={localMuted ? 0 : localVolume}
+                          onChange={(e) => {
+                            setLocalMuted(false);
+                            setLocalVolume(parseFloat(e.target.value));
+                          }}
+                          className="flex-1 accent-[#cc001e] cursor-pointer"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[11px] font-mono text-[#0e0e0e]/60 pt-2 border-t border-[#0e0e0e]/10">
+                      <span>Latência: {Math.round(oneWayLatencySec * 1000)}ms</span>
+                      <span>Sincronia Automática</span>
+                    </div>
                   </div>
                 </div>
               )}
+
+              {/* Footer Signature */}
+              <div className="flex items-center justify-between text-[10px] font-mono text-[#5a5a66] px-2">
+                <span>Design & I.A</span>
+                <span>Design Edge Unlocked!</span>
+              </div>
             </div>
           )}
         </main>
       </div>
 
       {/* Fixed Bottom Player Bar */}
-      <footer className="fixed bottom-0 inset-x-0 z-40 border-t border-slate-800/90 bg-[#0D111A]/95 backdrop-blur-lg px-4 lg:px-6 py-3 shadow-2xl">
+      <footer className="fixed bottom-0 inset-x-0 z-40 border-t border-[#24242b] bg-[#0e0e0e]/95 backdrop-blur-lg px-4 lg:px-6 py-3 shadow-2xl">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-3">
-          {/* Left: Current Track + Official YouTube Embed Dock */}
+          {/* Left: Current Track */}
           <div className="flex items-center gap-3 min-w-0 w-full md:w-1/3">
             <YouTubeEmbedPlayer
               ref={ytPlayerRef}
@@ -1686,29 +1735,25 @@ export const App: React.FC = () => {
               <div className="flex items-center gap-2">
                 {activeScene && (
                   <span
-                    className="text-xs px-2 py-0.5 rounded-md font-semibold shrink-0"
-                    style={{
-                      backgroundColor: `${activeScene.color}30`,
-                      color: '#f8fafc',
-                    }}
+                    className="text-[11px] px-2.5 py-0.5 rounded-full font-bold shrink-0 bg-[#cc001e]/20 border border-[#cc001e]/30 text-white"
                   >
                     {activeScene.emoji} {activeScene.name}
                   </span>
                 )}
-                <p className="text-sm font-semibold text-slate-100 truncate">
+                <p className="text-xs sm:text-sm font-bold text-[#f0f4f5] truncate">
                   {roomState?.currentTrack?.title || 'Nenhuma faixa selecionada'}
                 </p>
               </div>
-              <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5">
+              <div className="flex items-center gap-2 text-[10px] text-[#cbd5e1] mt-0.5">
                 <span>
                   {roomState?.currentTrack
                     ? roomState.currentTrack.sourceType === 'youtube'
-                      ? 'YouTube IFrame Player Oficial'
-                      : 'Streaming HTTP Range (MP3)'
-                    : 'Clique em uma Cena (1-9) para iniciar'}
+                      ? 'YouTube IFrame Sincronizado'
+                      : 'Audio Deck Range (MP3)'
+                    : 'Selecione uma Cena para tocar'}
                 </span>
                 {roomState?.ambientIsPlaying && roomState?.ambientTrack && (
-                  <span className="text-teal-400 truncate">
+                  <span className="text-[#cc001e] truncate font-medium">
                     • 🌧️ {roomState.ambientTrack.title}
                   </span>
                 )}
@@ -1722,12 +1767,12 @@ export const App: React.FC = () => {
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => sendHostCommand('set_shuffle')}
-                  className={`p-1.5 rounded-lg transition ${
+                  className={`taste-btn p-1.5 rounded-md transition ${
                     roomState?.shuffle
-                      ? 'text-amber-400 bg-amber-500/15'
-                      : 'text-slate-400 hover:text-white'
+                      ? 'text-white bg-[#cc001e] shadow-brand-glow-sm'
+                      : 'text-[#f0f4f5] bg-[#1a1a1f] hover:bg-[#25252d]'
                   }`}
-                  title="Embaralhar (Shuffle)"
+                  title="Embaralhar"
                 >
                   <Shuffle className="w-4 h-4" />
                 </button>
@@ -1737,14 +1782,15 @@ export const App: React.FC = () => {
                     setListenerUnlocked(true);
                     sendHostCommand('prev');
                   }}
-                  className="p-1.5 rounded-lg text-slate-200 hover:text-white hover:bg-slate-800 transition"
+                  className="taste-btn p-1.5 rounded-md text-[#f0f4f5] hover:text-white bg-[#1a1a1f] hover:bg-[#25252d] transition"
                   title="Anterior"
                 >
                   <SkipBack className="w-4 h-4" />
                 </button>
 
-                <button
-                  onClick={() => {
+                <AnimatedPlayButton
+                  isPlaying={Boolean(roomState?.isPlaying)}
+                  onToggle={() => {
                     setListenerUnlocked(true);
                     if (roomState?.isPlaying) {
                       sendHostCommand('pause', { positionSec: displayPositionSec });
@@ -1752,22 +1798,15 @@ export const App: React.FC = () => {
                       sendHostCommand('play', { positionSec: displayPositionSec });
                     }
                   }}
-                  className="w-10 h-10 rounded-full bg-amber-500 hover:bg-amber-400 text-slate-950 flex items-center justify-center shadow-lg shadow-amber-500/25 transition"
-                  title={roomState?.isPlaying ? 'Pausar' : 'Reproduzir'}
-                >
-                  {roomState?.isPlaying ? (
-                    <Pause className="w-5 h-5 fill-current" />
-                  ) : (
-                    <Play className="w-5 h-5 fill-current ml-0.5" />
-                  )}
-                </button>
+                  title={roomState?.isPlaying ? 'Pausar (Espaço)' : 'Reproduzir (Espaço)'}
+                />
 
                 <button
                   onClick={() => {
                     setListenerUnlocked(true);
                     sendHostCommand('next');
                   }}
-                  className="p-1.5 rounded-lg text-slate-200 hover:text-white hover:bg-slate-800 transition"
+                  className="taste-btn p-1.5 rounded-md text-[#f0f4f5] hover:text-white bg-[#1a1a1f] hover:bg-[#25252d] transition"
                   title="Próxima faixa"
                 >
                   <SkipForward className="w-4 h-4" />
@@ -1780,14 +1819,14 @@ export const App: React.FC = () => {
                       order[(order.indexOf(roomState?.repeatMode || 'playlist') + 1) % order.length];
                     sendHostCommand('set_repeat', { repeatMode: nextMode });
                   }}
-                  className={`p-1.5 rounded-lg transition ${
+                  className={`taste-btn p-1.5 rounded-md transition ${
                     roomState?.repeatMode && roomState.repeatMode !== 'none'
-                      ? 'text-amber-400 bg-amber-500/15'
-                      : 'text-slate-400 hover:text-white'
+                      ? 'text-white bg-[#cc001e] shadow-brand-glow-sm'
+                      : 'text-[#f0f4f5] bg-[#1a1a1f] hover:bg-[#25252d]'
                   }`}
                   title={`Repetir: ${
                     roomState?.repeatMode === 'track'
-                      ? 'Faixa atual'
+                      ? 'Faixa'
                       : roomState?.repeatMode === 'playlist'
                       ? 'Playlist'
                       : 'Desativado'
@@ -1801,15 +1840,15 @@ export const App: React.FC = () => {
                 </button>
               </div>
             ) : (
-              <div className="text-xs text-teal-300 font-medium flex items-center gap-1.5">
+              <div className="text-xs text-[#cc001e] font-bold flex items-center gap-1.5">
                 <Radio className="w-3.5 h-3.5 animate-pulse" />
-                <span>Reprodução controlada em tempo real pelo Anfitrião</span>
+                <span>Sincronia ao vivo com o Anfitrião</span>
               </div>
             )}
 
             {/* Progress Bar */}
-            <div className="w-full flex items-center gap-2.5 text-[11px] font-mono text-slate-400">
-              <span className="w-9 text-right">{formatTime(displayPositionSec)}</span>
+            <div className="w-full flex items-center gap-2.5 text-[11px] font-mono text-[#cbd5e1]">
+              <span className="w-9 text-right text-[#f0f4f5]">{formatTime(displayPositionSec)}</span>
               <input
                 type="range"
                 min={0}
@@ -1822,7 +1861,7 @@ export const App: React.FC = () => {
                   setDisplayPositionSec(target);
                   sendHostCommand('seek', { positionSec: target });
                 }}
-                className="flex-1 accent-amber-400 cursor-pointer disabled:cursor-default h-1.5 rounded-lg"
+                className="flex-1 accent-[#cc001e] cursor-pointer disabled:cursor-default h-1.5 rounded-lg"
               />
               <span className="w-9">{formatTime(displayDurationSec)}</span>
             </div>
@@ -1832,17 +1871,17 @@ export const App: React.FC = () => {
           <div className="hidden md:flex items-center justify-end gap-3 w-1/4">
             <button
               onClick={() => setLocalMuted(!localMuted)}
-              className="p-2 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800"
-              title={localMuted ? 'Ativar som' : 'Mudo'}
+              className="taste-btn p-2 rounded-md text-[#f0f4f5] hover:text-white bg-[#1a1a1f] hover:bg-[#25252d]"
+              title={localMuted ? 'Desmutar' : 'Mudo'}
             >
               {localMuted ? (
-                <VolumeX className="w-4 h-4 text-red-400" />
+                <VolumeX className="w-4 h-4 text-[#cc001e]" />
               ) : (
                 <Volume2 className="w-4 h-4" />
               )}
             </button>
             <div className="w-28 flex flex-col">
-              <span className="text-[10px] text-slate-400">
+              <span className="text-[10px] font-medium text-[#cbd5e1]">
                 {isHost ? 'Volume da Sala' : 'Seu Volume'}
               </span>
               <input
@@ -1866,7 +1905,7 @@ export const App: React.FC = () => {
                     setLocalVolume(v);
                   }
                 }}
-                className="w-full accent-amber-400 cursor-pointer"
+                className="w-full accent-[#cc001e] cursor-pointer"
               />
             </div>
           </div>
@@ -1892,53 +1931,53 @@ export const App: React.FC = () => {
 
       {/* Host Authentication Modal */}
       {authModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-[#131822] p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between">
-              <h3 className="font-display text-lg font-bold text-white flex items-center gap-2">
-                <Lock className="w-4 h-4 text-amber-400" />
-                Acesso do Anfitrião
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+          <div className="w-full max-w-md rounded-md border border-[#2a2a33] bg-[#141417] p-6 space-y-4 shadow-2xl animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-[#24242b] pb-3">
+              <h3 className="font-sans text-base font-extrabold text-[#f0f4f5] flex items-center gap-2">
+                <Lock className="w-4 h-4 text-[#cc001e]" />
+                Autenticação do Anfitrião
               </h3>
               <button
                 onClick={() => setAuthModalOpen(false)}
-                className="text-slate-400 hover:text-white"
+                className="taste-btn p-1.5 rounded-md text-[#cbd5e1] hover:text-[#f0f4f5] hover:bg-[#23232a]"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <p className="text-xs text-slate-400">
-              Digite a senha do anfitrião para desbloquear os controles de reprodução e edição.
+            <p className="text-xs text-[#cbd5e1] leading-relaxed">
+              Informe a senha de mestre para liberar o painel de cenas, gerenciador de playlists e crossfade.
             </p>
 
             {authError && (
-              <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+              <div className="rounded-lg border border-[#cc001e]/40 bg-[#cc001e]/10 px-4 py-2.5 text-xs text-[#f0f4f5]">
                 {authError}
               </div>
             )}
 
-            <form onSubmit={handleHostLogin} className="space-y-3">
+            <form onSubmit={handleHostLogin} className="space-y-4">
               <input
                 type="password"
                 value={passwordInput}
                 onChange={(e) => setPasswordInput(e.target.value)}
-                placeholder="Senha do anfitrião"
-                className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3.5 py-2.5 text-sm text-white focus:border-amber-500 focus:outline-none"
+                placeholder="Senha de Anfitrião"
+                className="w-full rounded-lg border border-[#2a2a33] bg-[#0e0e0e] px-4 py-2.5 text-sm text-[#f0f4f5] placeholder-[#4f5660] focus:border-[#cc001e] focus:outline-none"
                 autoFocus
               />
-              <div className="flex justify-end gap-2">
+              <div className="flex justify-end gap-2 pt-1">
                 <button
                   type="button"
                   onClick={() => setAuthModalOpen(false)}
-                  className="rounded-xl border border-slate-700 px-4 py-2 text-xs text-slate-300"
+                  className="taste-btn rounded-lg border border-[#2a2a33] bg-[#1a1a1f] px-4 py-2 text-xs font-semibold text-[#cbd5e1] hover:text-[#f0f4f5]"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="rounded-xl bg-amber-500 hover:bg-amber-400 px-5 py-2 text-xs font-semibold text-slate-950"
+                  className="taste-btn rounded-lg bg-[#cc001e] hover:bg-[#e00022] px-5 py-2 text-xs font-bold text-white shadow-brand-glow-sm"
                 >
-                  Desbloquear Controles
+                  Desbloquear
                 </button>
               </div>
             </form>

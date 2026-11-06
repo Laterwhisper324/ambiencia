@@ -113,7 +113,7 @@ export const PlaylistEditorView: React.FC<Props> = ({
       setImportError(
         err instanceof Error
           ? err.message
-          : 'Erro ao importar link/playlist do YouTube Music.'
+          : 'Erro ao importar playlist ou link do YouTube.'
       );
     } finally {
       setImportingYt(false);
@@ -123,7 +123,7 @@ export const PlaylistEditorView: React.FC<Props> = ({
   return (
     <div className="space-y-5">
       {/* Playlist Header Card */}
-      <div className="rounded-2xl border border-slate-800 bg-gradient-to-br from-[#141A29] to-[#0E131D] p-5 shadow-xl">
+      <div className="taste-card rounded-md border border-[#2a2a33] bg-[#141417] p-6 shadow-card-elevated">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           {editingHeader ? (
             <div className="flex-1 space-y-2">
@@ -131,25 +131,25 @@ export const PlaylistEditorView: React.FC<Props> = ({
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-1.5 text-base font-bold text-white"
+                className="w-full rounded-lg border border-[#2a2a33] bg-[#0e0e0e] px-4 py-2 text-base font-bold text-[#f0f4f5] focus:border-[#cc001e] focus:outline-none"
               />
               <input
                 type="text"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Descrição da playlist..."
-                className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs text-slate-300"
+                className="w-full rounded-lg border border-[#2a2a33] bg-[#0e0e0e] px-4 py-2 text-xs text-[#cbd5e1] focus:border-[#cc001e] focus:outline-none"
               />
               <div className="flex items-center gap-2 pt-1">
                 <button
                   onClick={handleSaveHeader}
-                  className="inline-flex items-center gap-1 rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-slate-950"
+                  className="taste-btn inline-flex items-center gap-1.5 rounded-md bg-[#cc001e] px-4 py-1.5 text-xs font-bold text-white shadow-brand-glow-sm"
                 >
                   <Check className="w-3.5 h-3.5" /> Salvar
                 </button>
                 <button
                   onClick={() => setEditingHeader(false)}
-                  className="inline-flex items-center gap-1 rounded-lg bg-slate-800 px-3 py-1.5 text-xs text-slate-300"
+                  className="taste-btn inline-flex items-center gap-1.5 rounded-md bg-[#23232a] px-3.5 py-1.5 text-xs text-[#cbd5e1] hover:text-[#f0f4f5]"
                 >
                   <X className="w-3.5 h-3.5" /> Cancelar
                 </button>
@@ -157,16 +157,16 @@ export const PlaylistEditorView: React.FC<Props> = ({
             </div>
           ) : (
             <div className="space-y-1">
-              <div className="flex items-center gap-2.5">
-                <h2 className="font-display text-xl font-bold text-slate-100">
+              <div className="flex items-center gap-3">
+                <h2 className="font-sans text-xl font-extrabold tracking-tight text-[#f0f4f5]">
                   {playlist.name}
                 </h2>
-                <span className="rounded-full bg-amber-500/15 border border-amber-500/30 px-2.5 py-0.5 text-xs font-mono text-amber-300">
+                <span className="rounded-full bg-[#cc001e]/15 border border-[#cc001e]/30 px-3 py-0.5 text-xs font-mono font-bold text-[#cc001e]">
                   {playlist.tracks.length} faixas
                 </span>
               </div>
-              <p className="text-xs text-slate-400">
-                {playlist.description || 'Arraste e solte as faixas abaixo para reordenar a sequência da playlist.'}
+              <p className="text-xs text-[#cbd5e1]">
+                {playlist.description || 'Arraste as faixas para reordenar a sequência de reprodução.'}
               </p>
             </div>
           )}
@@ -175,9 +175,9 @@ export const PlaylistEditorView: React.FC<Props> = ({
             <button
               onClick={() => onPlayPlaylist(playlist, 0)}
               disabled={playlist.tracks.length === 0}
-              className="inline-flex items-center gap-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold px-4 py-2 text-xs transition disabled:opacity-40"
+              className="taste-btn inline-flex items-center gap-2 rounded-lg bg-[#cc001e] hover:bg-[#e00022] text-white font-bold px-5 py-2.5 text-xs transition disabled:opacity-40 shadow-brand-glow-sm"
             >
-              <Play className="w-4 h-4 fill-current" />
+              <Play className="w-4 h-4 fill-current ml-0.5" />
               Tocar Playlist
             </button>
 
@@ -187,7 +187,7 @@ export const PlaylistEditorView: React.FC<Props> = ({
                 setDescription(playlist.description);
                 setEditingHeader(true);
               }}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-900/80 hover:bg-slate-800 px-3 py-2 text-xs text-slate-200"
+              className="taste-btn inline-flex items-center gap-1.5 rounded-lg border border-[#2a2a33] bg-[#0e0e0e] hover:bg-[#23232a] px-3.5 py-2.5 text-xs text-[#f0f4f5]"
               title="Renomear playlist"
             >
               <Edit3 className="w-3.5 h-3.5" />
@@ -196,7 +196,7 @@ export const PlaylistEditorView: React.FC<Props> = ({
 
             <button
               onClick={handleDuplicate}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-900/80 hover:bg-slate-800 px-3 py-2 text-xs text-slate-200"
+              className="taste-btn inline-flex items-center gap-1.5 rounded-lg border border-[#2a2a33] bg-[#0e0e0e] hover:bg-[#23232a] px-3.5 py-2.5 text-xs text-[#f0f4f5]"
               title="Duplicar playlist"
             >
               <Copy className="w-3.5 h-3.5" />
@@ -205,7 +205,7 @@ export const PlaylistEditorView: React.FC<Props> = ({
 
             <button
               onClick={handleDeletePlaylist}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 px-3 py-2 text-xs text-red-300"
+              className="taste-btn inline-flex items-center gap-1.5 rounded-lg border border-[#cc001e]/30 bg-[#cc001e]/10 hover:bg-[#cc001e]/20 px-3.5 py-2.5 text-xs text-[#cc001e]"
               title="Excluir playlist"
             >
               <Trash2 className="w-3.5 h-3.5" />
@@ -213,10 +213,10 @@ export const PlaylistEditorView: React.FC<Props> = ({
           </div>
         </div>
 
-        {/* Add track from library or import YouTube Music link/playlist */}
-        <div className="mt-4 pt-4 border-t border-slate-800/80 space-y-2.5">
+        {/* Add track from library or import YouTube link */}
+        <div className="mt-5 pt-5 border-t border-[#24242b] space-y-3">
           {importError && (
-            <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+            <div className="rounded-lg border border-[#cc001e]/40 bg-[#cc001e]/10 px-4 py-2.5 text-xs text-[#f0f4f5]">
               {importError}
             </div>
           )}
@@ -225,9 +225,9 @@ export const PlaylistEditorView: React.FC<Props> = ({
             <select
               value={selectedAddTrackId}
               onChange={(e) => setSelectedAddTrackId(e.target.value)}
-              className="flex-1 rounded-xl border border-slate-700/80 bg-slate-900 px-3.5 py-2 text-xs text-slate-200 focus:border-amber-500 focus:outline-none"
+              className="flex-1 rounded-lg border border-[#2a2a33] bg-[#0e0e0e] px-4 py-2.5 text-xs text-[#f0f4f5] focus:border-[#cc001e] focus:outline-none"
             >
-              <option value="">+ Escolher faixa da biblioteca para adicionar nesta playlist...</option>
+              <option value="">+ Selecionar faixa da biblioteca para incluir...</option>
               {allTracks.map((t) => (
                 <option key={t.id} value={t.id}>
                   [{t.sourceType.toUpperCase()}] {t.title}
@@ -238,10 +238,10 @@ export const PlaylistEditorView: React.FC<Props> = ({
               type="button"
               onClick={handleAddTrack}
               disabled={!selectedAddTrackId}
-              className="rounded-xl bg-slate-800 hover:bg-amber-500 hover:text-slate-950 text-slate-200 font-semibold px-4 py-2 text-xs transition inline-flex items-center justify-center gap-1.5 disabled:opacity-40"
+              className="taste-btn rounded-lg bg-[#23232a] hover:bg-[#cc001e] hover:text-white text-[#f0f4f5] font-semibold px-4 py-2.5 text-xs transition inline-flex items-center justify-center gap-1.5 disabled:opacity-40"
             >
               <Plus className="w-4 h-4" />
-              Adicionar da Biblioteca
+              Adicionar
             </button>
           </div>
 
@@ -253,16 +253,16 @@ export const PlaylistEditorView: React.FC<Props> = ({
               type="text"
               value={ytImportUrl}
               onChange={(e) => setYtImportUrl(e.target.value)}
-              placeholder="Ou cole link de faixa / playlist do YouTube ou YouTube Music (music.youtube.com/playlist?list=...)"
-              className="flex-1 rounded-xl border border-slate-700/80 bg-slate-900 px-3.5 py-2 text-xs text-slate-200 focus:border-red-500 focus:outline-none"
+              placeholder="Cole link de vídeo ou playlist do YouTube (music.youtube.com/playlist?list=...)"
+              className="flex-1 rounded-lg border border-[#2a2a33] bg-[#0e0e0e] px-4 py-2.5 text-xs text-[#f0f4f5] focus:border-[#cc001e] focus:outline-none"
             />
             <button
               type="submit"
               disabled={!ytImportUrl.trim() || importingYt}
-              className="rounded-xl bg-red-500/90 hover:bg-red-500 text-white font-semibold px-4 py-2 text-xs transition inline-flex items-center justify-center gap-1.5 disabled:opacity-40"
+              className="taste-btn rounded-lg bg-[#cc001e] hover:bg-[#e00022] text-white font-bold px-5 py-2.5 text-xs transition inline-flex items-center justify-center gap-2 disabled:opacity-40 shadow-brand-glow-sm"
             >
               <Youtube className="w-4 h-4" />
-              {importingYt ? 'Importando...' : 'Importar Link / Playlist YT'}
+              {importingYt ? 'Importando...' : 'Importar do YouTube'}
             </button>
           </form>
         </div>
@@ -270,11 +270,11 @@ export const PlaylistEditorView: React.FC<Props> = ({
 
       {/* Draggable Track Queue */}
       {playlist.tracks.length === 0 ? (
-        <div className="rounded-2xl border border-slate-800/80 bg-[#121722]/40 p-10 text-center">
-          <Music className="w-8 h-8 text-slate-600 mx-auto mb-2" />
-          <p className="text-sm text-slate-300 font-medium">Playlist vazia</p>
-          <p className="text-xs text-slate-500 mt-1">
-            Use o seletor acima ou a Biblioteca Central para adicionar músicas MP3 ou links do YouTube.
+        <div className="rounded-md border border-[#2a2a33] bg-[#141417] p-12 text-center">
+          <Music className="w-8 h-8 text-[#4f5660] mx-auto mb-2" />
+          <p className="text-sm text-[#f0f4f5] font-semibold">Playlist vazia</p>
+          <p className="text-xs text-[#cbd5e1] mt-1">
+            Adicione faixas da biblioteca ou cole links do YouTube para compor a playlist.
           </p>
         </div>
       ) : (
@@ -301,47 +301,47 @@ export const PlaylistEditorView: React.FC<Props> = ({
                     setDraggedIndex(null);
                   }
                 }}
-                className={`rounded-xl border p-3 transition flex items-center justify-between gap-3 cursor-grab active:cursor-grabbing ${
+                className={`taste-card rounded-lg border p-3.5 transition flex items-center justify-between gap-3 cursor-grab active:cursor-grabbing ${
                   isDragOver
-                    ? 'border-amber-400 bg-amber-500/15 scale-[1.01]'
+                    ? 'border-[#cc001e] bg-[#cc001e]/20 scale-[1.01]'
                     : isPlayingThis
-                    ? 'border-amber-500/60 bg-amber-500/10'
-                    : 'border-slate-800/80 bg-[#121722]/85 hover:border-slate-700'
+                    ? 'border-[#cc001e] bg-[#cc001e]/10 shadow-brand-glow-sm'
+                    : 'border-[#24242b] bg-[#141417] hover:border-[#383842]'
                 }`}
               >
                 <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <GripVertical className="w-4 h-4 text-slate-500 shrink-0" />
-                  <span className="w-6 text-xs font-mono text-slate-500 text-center shrink-0">
+                  <GripVertical className="w-4 h-4 text-[#5a5a66] shrink-0" />
+                  <span className="w-6 text-xs font-mono text-[#cbd5e1] text-center shrink-0">
                     {idx + 1}
                   </span>
                   <button
                     onClick={() => onPlayPlaylist(playlist, idx)}
-                    className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition ${
+                    className={`taste-btn w-9 h-9 rounded-md flex items-center justify-center shrink-0 transition ${
                       isPlayingThis
-                        ? 'bg-amber-500 text-slate-950'
-                        : 'bg-slate-800 text-slate-200 hover:bg-amber-500 hover:text-slate-950'
+                        ? 'bg-[#cc001e] text-white shadow-brand-glow-sm'
+                        : 'bg-[#23232a] text-[#f0f4f5] hover:bg-[#cc001e] hover:text-white'
                     }`}
                     title="Tocar a partir desta faixa"
                   >
-                    <Play className="w-4 h-4 fill-current" />
+                    <Play className="w-4 h-4 fill-current ml-0.5" />
                   </button>
 
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-slate-100 truncate">
+                      <span className="text-xs sm:text-sm font-semibold text-[#f0f4f5] truncate">
                         {track.title}
                       </span>
                       {track.sourceType === 'youtube' ? (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-mono uppercase px-2 py-0.5 rounded-full border border-red-500/30 bg-red-500/10 text-red-300">
+                        <span className="inline-flex items-center gap-1 text-[9px] font-mono uppercase px-2 py-0.5 rounded-full border border-[#cc001e]/30 bg-[#cc001e]/10 text-[#cc001e]">
                           <Youtube className="w-3 h-3" /> YT
                         </span>
                       ) : (
-                        <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-300">
+                        <span className="text-[9px] font-mono uppercase px-2 py-0.5 rounded-full border border-[#2a2a33] bg-[#0e0e0e] text-[#cbd5e1]">
                           MP3
                         </span>
                       )}
                     </div>
-                    <div className="text-[11px] text-slate-500 truncate mt-0.5">
+                    <div className="text-[10px] text-[#cbd5e1] truncate mt-0.5">
                       {track.tags.map((t) => `#${t}`).join('  ')}
                     </div>
                   </div>
@@ -351,7 +351,7 @@ export const PlaylistEditorView: React.FC<Props> = ({
                   <button
                     onClick={() => handleReorder(idx, idx - 1)}
                     disabled={idx === 0}
-                    className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white disabled:opacity-25"
+                    className="taste-btn p-1.5 rounded-md text-[#cbd5e1] hover:bg-[#23232a] hover:text-[#f0f4f5] disabled:opacity-25"
                     title="Mover para cima"
                   >
                     <ArrowUp className="w-3.5 h-3.5" />
@@ -359,14 +359,14 @@ export const PlaylistEditorView: React.FC<Props> = ({
                   <button
                     onClick={() => handleReorder(idx, idx + 1)}
                     disabled={idx === playlist.tracks.length - 1}
-                    className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white disabled:opacity-25"
+                    className="taste-btn p-1.5 rounded-md text-[#cbd5e1] hover:bg-[#23232a] hover:text-[#f0f4f5] disabled:opacity-25"
                     title="Mover para baixo"
                   >
                     <ArrowDown className="w-3.5 h-3.5" />
                   </button>
                   <button
                     onClick={() => handleRemoveAtIndex(idx)}
-                    className="p-1.5 rounded-lg text-slate-400 hover:bg-red-500/15 hover:text-red-400"
+                    className="taste-btn p-1.5 rounded-md text-[#cbd5e1] hover:bg-[#cc001e]/20 hover:text-[#cc001e]"
                     title="Remover faixa da playlist"
                   >
                     <Trash2 className="w-4 h-4" />
