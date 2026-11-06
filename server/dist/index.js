@@ -65,6 +65,7 @@ const apiLimiter = (0, express_rate_limit_1.default)({
     max: 300,
     standardHeaders: true,
     legacyHeaders: false,
+    validate: false,
 });
 exports.app.use('/api', apiLimiter);
 // Healthcheck endpoint

@@ -66,6 +66,7 @@ const apiLimiter = rateLimit({
   max: 300,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: false,
 });
 app.use('/api', apiLimiter);
 
