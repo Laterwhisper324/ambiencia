@@ -1,8 +1,30 @@
 import crypto from 'crypto';
 import type { Server, Socket } from 'socket.io';
+import { Redis } from '@upstash/redis';
 import { db, getPlaylistById, getSceneById, getTrackById } from '../db/database';
 import { isValidHostAuth } from '../middleware/auth';
 import type { RepeatMode, RoomPlaybackState, Track } from '../types';
+
+let redisClient: Redis | null = null;
+let redisInitialized = false;
+
+export function getRedisClient(): Redis | null {
+  if (redisInitialized) return redisClient;
+  redisInitialized = true;
+  try {
+    const hasEnv = Boolean(
+      (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) ||
+      (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN)
+    );
+    if (hasEnv) {
+      redisClient = Redis.fromEnv();
+      console.log('[Redis] Conexão com Upstash Redis/Vercel KV ativada com sucesso!');
+    }
+  } catch (err) {
+    console.warn('[Redis] Aviso ao inicializar Redis:', err);
+  }
+  return redisClient;
+}
 
 const activeRooms = new Map<string, RoomPlaybackState>();
 const roomSockets = new Map<string, Set<string>>();
@@ -196,6 +218,69 @@ export function persistRoomState(state: RoomPlaybackState): void {
     state.name,
     state.code
   );
+
+  const redis = getRedisClient();
+  if (redis) {
+    redis.set(`room:${state.code}`, JSON.stringify(state)).catch((err) => {
+      console.warn('[Redis] Erro ao persistir sala:', err);
+    });
+  }
+}
+
+export async function getOrLoadRoomState(
+  code: string,
+  name?: string
+): Promise<{ state: RoomPlaybackState; hostToken: string }> {
+  const upperCode = code.trim().toUpperCase();
+  const redis = getRedisClient();
+
+  if (redis) {
+    try {
+      const cached = await redis.get<string | RoomPlaybackState>(`room:${upperCode}`);
+      if (cached) {
+        const parsed: RoomPlaybackState =
+          typeof cached === 'string' ? JSON.parse(cached) : cached;
+        activeRooms.set(upperCode, parsed);
+
+        let token = await redis.get<string>(`room_token:${upperCode}`);
+        if (!token) {
+          const row = db
+            .prepare('SELECT host_token FROM rooms WHERE code = ?')
+            .get(upperCode) as { host_token: string } | undefined;
+          token = row?.host_token || `tok_${crypto.randomBytes(18).toString('hex')}`;
+          await redis.set(`room_token:${upperCode}`, token);
+        }
+        return { state: parsed, hostToken: token };
+      }
+    } catch (err) {
+      console.warn('[Redis] Erro ao buscar sala no Redis:', err);
+    }
+  }
+
+  const result = loadOrCreateRoom(upperCode, name);
+  if (redis) {
+    try {
+      await redis.set(`room:${upperCode}`, JSON.stringify(result.state));
+      await redis.set(`room_token:${upperCode}`, result.hostToken);
+    } catch {}
+  }
+  return result;
+}
+
+export async function executeHostCommandAsync(
+  payload: HostCommandPayload,
+  defaultRoomCode = 'AB12CD',
+  senderSocketId?: string
+): Promise<{ ok: boolean; error?: string; state?: RoomPlaybackState }> {
+  const code = (payload?.code || defaultRoomCode || 'AB12CD').trim().toUpperCase();
+  const { state: currentLoadedState } = await getOrLoadRoomState(code);
+  activeRooms.set(code, currentLoadedState);
+
+  const result = executeHostCommand(payload, defaultRoomCode, senderSocketId);
+  if (result.ok && result.state) {
+    persistRoomState(result.state);
+  }
+  return result;
 }
 
 export function executeHostCommand(

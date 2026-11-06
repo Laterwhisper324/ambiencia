@@ -44,6 +44,7 @@ const corsOptions = {
     credentials: true,
 };
 exports.app.use((0, cors_1.default)(corsOptions));
+exports.app.options('*', (0, cors_1.default)(corsOptions));
 exports.app.use(express_1.default.json({ limit: '2mb' }));
 // Ensure SQLite schema and seed data are initialized before handling requests
 const seedReadyPromise = (0, seed_1.ensureSeedData)().catch((err) => {
@@ -118,7 +119,7 @@ if (!process.env.VERCEL) {
     });
     (0, roomManager_1.setupSocketServer)(io);
     seedReadyPromise.then(() => {
-        server.listen(config_1.config.port, () => {
+        server.listen(config_1.config.port, '0.0.0.0', () => {
             console.log(`========================================================`);
             console.log(`🎵 Ambiência Server rodando na porta ${config_1.config.port}`);
             console.log(`📁 Upload Dir: ${config_1.config.uploadDir} (Provider: ${config_1.config.storageProvider})`);

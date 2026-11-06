@@ -4,6 +4,21 @@ const STORAGE_PASS_KEY = 'ambiencia_host_password';
 const STORAGE_TOKEN_KEY = 'ambiencia_host_token';
 const STORAGE_CLIENT_ID_KEY = 'ambiencia_client_id';
 
+export const API_BASE_URL = (
+  (import.meta.env.VITE_API_URL as string | undefined) ||
+  (import.meta.env.VITE_SERVER_URL as string | undefined) ||
+  ''
+).replace(/\/+$/, '');
+
+export function apiUrl(path: string): string {
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  return `${API_BASE_URL}${cleanPath}`;
+}
+
+export function getTrackStreamUrl(trackId: string): string {
+  return apiUrl(`/api/tracks/${trackId}/stream`);
+}
+
 export function getClientId(): string {
   let id = sessionStorage.getItem(STORAGE_CLIENT_ID_KEY);
   if (!id) {
@@ -52,7 +67,7 @@ export const api = {
     if (search) params.set('search', search);
     if (tag) params.set('tag', tag);
     const qs = params.toString() ? `?${params.toString()}` : '';
-    const res = await fetch(`/api/tracks${qs}`);
+    const res = await fetch(apiUrl(`/api/tracks${qs}`));
     return handleResponse(res);
   },
 
@@ -67,7 +82,7 @@ export const api = {
     if (options?.isAmbient !== undefined) formData.append('isAmbient', String(options.isAmbient));
     if (options?.durationSec !== undefined) formData.append('durationSec', String(options.durationSec));
 
-    const res = await fetch('/api/tracks/upload', {
+    const res = await fetch(apiUrl('/api/tracks/upload'), {
       method: 'POST',
       headers: authHeaders(),
       body: formData,
@@ -87,7 +102,7 @@ export const api = {
     playlist?: Playlist;
     isPlaylistImport?: boolean;
   }> {
-    const res = await fetch('/api/tracks/youtube', {
+    const res = await fetch(apiUrl('/api/tracks/youtube'), {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(payload),
@@ -99,7 +114,7 @@ export const api = {
     id: string,
     payload: { title?: string; tags?: string[]; isAmbient?: boolean; durationSec?: number }
   ): Promise<{ track: Track }> {
-    const res = await fetch(`/api/tracks/${id}`, {
+    const res = await fetch(apiUrl(`/api/tracks/${id}`), {
       method: 'PATCH',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(payload),
@@ -108,7 +123,7 @@ export const api = {
   },
 
   async deleteTrack(id: string): Promise<{ ok: boolean }> {
-    const res = await fetch(`/api/tracks/${id}`, {
+    const res = await fetch(apiUrl(`/api/tracks/${id}`), {
       method: 'DELETE',
       headers: authHeaders(),
     });
@@ -117,7 +132,7 @@ export const api = {
 
   // Playlists
   async getPlaylists(): Promise<{ playlists: Playlist[] }> {
-    const res = await fetch('/api/playlists');
+    const res = await fetch(apiUrl('/api/playlists'));
     return handleResponse(res);
   },
 
@@ -126,7 +141,7 @@ export const api = {
     description?: string;
     trackIds?: string[];
   }): Promise<{ playlist: Playlist }> {
-    const res = await fetch('/api/playlists', {
+    const res = await fetch(apiUrl('/api/playlists'), {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(payload),
@@ -138,7 +153,7 @@ export const api = {
     id: string,
     payload: { name?: string; description?: string }
   ): Promise<{ playlist: Playlist }> {
-    const res = await fetch(`/api/playlists/${id}`, {
+    const res = await fetch(apiUrl(`/api/playlists/${id}`), {
       method: 'PATCH',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(payload),
@@ -147,7 +162,7 @@ export const api = {
   },
 
   async duplicatePlaylist(id: string, name?: string): Promise<{ playlist: Playlist }> {
-    const res = await fetch(`/api/playlists/${id}/duplicate`, {
+    const res = await fetch(apiUrl(`/api/playlists/${id}/duplicate`), {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ name }),
@@ -156,7 +171,7 @@ export const api = {
   },
 
   async reorderPlaylistTracks(id: string, trackIds: string[]): Promise<{ playlist: Playlist }> {
-    const res = await fetch(`/api/playlists/${id}/tracks`, {
+    const res = await fetch(apiUrl(`/api/playlists/${id}/tracks`), {
       method: 'PUT',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ trackIds }),
@@ -165,7 +180,7 @@ export const api = {
   },
 
   async addTrackToPlaylist(id: string, trackId: string): Promise<{ playlist: Playlist }> {
-    const res = await fetch(`/api/playlists/${id}/tracks`, {
+    const res = await fetch(apiUrl(`/api/playlists/${id}/tracks`), {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ trackId }),
@@ -174,7 +189,7 @@ export const api = {
   },
 
   async deletePlaylist(id: string): Promise<{ ok: boolean }> {
-    const res = await fetch(`/api/playlists/${id}`, {
+    const res = await fetch(apiUrl(`/api/playlists/${id}`), {
       method: 'DELETE',
       headers: authHeaders(),
     });
@@ -183,7 +198,7 @@ export const api = {
 
   // Scenes
   async getScenes(): Promise<{ scenes: SceneButton[] }> {
-    const res = await fetch('/api/scenes');
+    const res = await fetch(apiUrl('/api/scenes'));
     return handleResponse(res);
   },
 
@@ -196,7 +211,7 @@ export const api = {
     ambientVolume?: number;
     shortcutKey?: number | null;
   }): Promise<{ scene: SceneButton }> {
-    const res = await fetch('/api/scenes', {
+    const res = await fetch(apiUrl('/api/scenes'), {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(payload),
@@ -216,7 +231,7 @@ export const api = {
       shortcutKey: number | null;
     }>
   ): Promise<{ scene: SceneButton }> {
-    const res = await fetch(`/api/scenes/${id}`, {
+    const res = await fetch(apiUrl(`/api/scenes/${id}`), {
       method: 'PATCH',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(payload),
@@ -225,7 +240,7 @@ export const api = {
   },
 
   async deleteScene(id: string): Promise<{ ok: boolean }> {
-    const res = await fetch(`/api/scenes/${id}`, {
+    const res = await fetch(apiUrl(`/api/scenes/${id}`), {
       method: 'DELETE',
       headers: authHeaders(),
     });
@@ -239,7 +254,7 @@ export const api = {
     hostToken: string;
     state: RoomPlaybackState;
   }> {
-    const res = await fetch('/api/rooms/auth', {
+    const res = await fetch(apiUrl('/api/rooms/auth'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ password, hostToken: getStoredHostToken(), code }),
@@ -252,7 +267,7 @@ export const api = {
     hostToken: string;
     sharePath: string;
   }> {
-    const res = await fetch('/api/rooms', {
+    const res = await fetch(apiUrl('/api/rooms'), {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ name, code }),
@@ -267,7 +282,7 @@ export const api = {
   }> {
     const clientId = getClientId();
     const res = await fetch(
-      `/api/rooms/${encodeURIComponent(code)}?clientId=${encodeURIComponent(clientId)}`,
+      apiUrl(`/api/rooms/${encodeURIComponent(code)}?clientId=${encodeURIComponent(clientId)}`),
       {
         headers: authHeaders(),
       }
@@ -279,7 +294,7 @@ export const api = {
     code: string,
     payload: Record<string, unknown>
   ): Promise<{ ok: boolean; state?: RoomPlaybackState; error?: string }> {
-    const res = await fetch(`/api/rooms/${encodeURIComponent(code)}/command`, {
+    const res = await fetch(apiUrl(`/api/rooms/${encodeURIComponent(code)}/command`), {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({

@@ -43,6 +43,7 @@ const corsOptions: cors.CorsOptions = {
   credentials: true,
 };
 app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 app.use(express.json({ limit: '2mb' }));
 
 // Ensure SQLite schema and seed data are initialized before handling requests
@@ -134,7 +135,7 @@ if (!process.env.VERCEL) {
   setupSocketServer(io);
 
   seedReadyPromise.then(() => {
-    server.listen(config.port, () => {
+    server.listen(config.port, '0.0.0.0', () => {
       console.log(`========================================================`);
       console.log(`🎵 Ambiência Server rodando na porta ${config.port}`);
       console.log(`📁 Upload Dir: ${config.uploadDir} (Provider: ${config.storageProvider})`);

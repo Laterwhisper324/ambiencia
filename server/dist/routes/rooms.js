@@ -6,7 +6,7 @@ const auth_1 = require("../middleware/auth");
 const roomManager_1 = require("../socket/roomManager");
 exports.roomsRouter = (0, express_1.Router)();
 // POST /api/rooms/auth - Verify host password or token
-exports.roomsRouter.post('/auth', (req, res) => {
+exports.roomsRouter.post('/auth', async (req, res) => {
     const { password, hostToken, code } = req.body || {};
     const valid = (0, auth_1.isValidHostAuth)(password, hostToken, code);
     if (!valid) {
@@ -17,7 +17,7 @@ exports.roomsRouter.post('/auth', (req, res) => {
         return;
     }
     const roomCode = typeof code === 'string' && code.trim() ? code.trim().toUpperCase() : 'AB12CD';
-    const { state, hostToken: roomToken } = (0, roomManager_1.loadOrCreateRoom)(roomCode);
+    const { state, hostToken: roomToken } = await (0, roomManager_1.getOrLoadRoomState)(roomCode);
     const now = Date.now();
     res.json({
         valid: true,
@@ -32,7 +32,7 @@ exports.roomsRouter.post('/auth', (req, res) => {
     });
 });
 // POST /api/rooms - Create a new room (returns short code and hostToken)
-exports.roomsRouter.post('/', (req, res) => {
+exports.roomsRouter.post('/', async (req, res) => {
     const password = req.headers['x-host-password'] || req.body?.password;
     const token = req.headers['x-host-token'] || req.body?.hostToken;
     // Allow creating a room with valid password/token OR generate a new room token directly
@@ -47,7 +47,7 @@ exports.roomsRouter.post('/', (req, res) => {
             });
             return;
         }
-        const { state, hostToken } = (0, roomManager_1.loadOrCreateRoom)(customCode, name);
+        const { state, hostToken } = await (0, roomManager_1.getOrLoadRoomState)(customCode, name);
         res.status(201).json({
             state,
             hostToken,
@@ -56,6 +56,7 @@ exports.roomsRouter.post('/', (req, res) => {
         return;
     }
     const { state, hostToken } = (0, roomManager_1.createNewRoom)(name);
+    (0, roomManager_1.persistRoomState)(state);
     res.status(201).json({
         state,
         hostToken,
@@ -63,12 +64,12 @@ exports.roomsRouter.post('/', (req, res) => {
     });
 });
 // GET /api/rooms/:code - Fetch room state & record active listener heartbeat
-exports.roomsRouter.get('/:code', (req, res) => {
+exports.roomsRouter.get('/:code', async (req, res) => {
     const code = req.params.code.trim().toUpperCase();
     const clientId = typeof req.query.clientId === 'string' ? req.query.clientId : undefined;
     const password = req.headers['x-host-password'];
     const token = req.headers['x-host-token'];
-    const { state, hostToken } = (0, roomManager_1.loadOrCreateRoom)(code);
+    const { state, hostToken } = await (0, roomManager_1.getOrLoadRoomState)(code);
     const listenerCount = (0, roomManager_1.touchRoomClient)(code, clientId);
     state.listenerCount = listenerCount;
     const isHost = (0, auth_1.isValidHostAuth)(password, token, code);
@@ -86,11 +87,11 @@ exports.roomsRouter.get('/:code', (req, res) => {
     });
 });
 // POST /api/rooms/:code/command - Execute host playback command via HTTP (for serverless / fallback)
-exports.roomsRouter.post('/:code/command', (req, res) => {
+exports.roomsRouter.post('/:code/command', async (req, res) => {
     const code = req.params.code.trim().toUpperCase();
     const password = req.headers['x-host-password'] || req.body?.password;
     const hostToken = req.headers['x-host-token'] || req.body?.hostToken;
-    const result = (0, roomManager_1.executeHostCommand)({
+    const result = await (0, roomManager_1.executeHostCommandAsync)({
         ...req.body,
         code,
         password,

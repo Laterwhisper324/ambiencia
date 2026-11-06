@@ -3,16 +3,39 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.getRedisClient = getRedisClient;
 exports.touchRoomClient = touchRoomClient;
 exports.computeCurrentPosition = computeCurrentPosition;
 exports.loadOrCreateRoom = loadOrCreateRoom;
 exports.createNewRoom = createNewRoom;
 exports.persistRoomState = persistRoomState;
+exports.getOrLoadRoomState = getOrLoadRoomState;
+exports.executeHostCommandAsync = executeHostCommandAsync;
 exports.executeHostCommand = executeHostCommand;
 exports.setupSocketServer = setupSocketServer;
 const crypto_1 = __importDefault(require("crypto"));
+const redis_1 = require("@upstash/redis");
 const database_1 = require("../db/database");
 const auth_1 = require("../middleware/auth");
+let redisClient = null;
+let redisInitialized = false;
+function getRedisClient() {
+    if (redisInitialized)
+        return redisClient;
+    redisInitialized = true;
+    try {
+        const hasEnv = Boolean((process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) ||
+            (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN));
+        if (hasEnv) {
+            redisClient = redis_1.Redis.fromEnv();
+            console.log('[Redis] Conexão com Upstash Redis/Vercel KV ativada com sucesso!');
+        }
+    }
+    catch (err) {
+        console.warn('[Redis] Aviso ao inicializar Redis:', err);
+    }
+    return redisClient;
+}
 const activeRooms = new Map();
 const roomSockets = new Map();
 const roomHttpClients = new Map();
@@ -145,6 +168,56 @@ function persistRoomState(state) {
     state.serverNow = Date.now();
     activeRooms.set(state.code, state);
     database_1.db.prepare('UPDATE rooms SET state_json = ?, name = ? WHERE code = ?').run(JSON.stringify(state), state.name, state.code);
+    const redis = getRedisClient();
+    if (redis) {
+        redis.set(`room:${state.code}`, JSON.stringify(state)).catch((err) => {
+            console.warn('[Redis] Erro ao persistir sala:', err);
+        });
+    }
+}
+async function getOrLoadRoomState(code, name) {
+    const upperCode = code.trim().toUpperCase();
+    const redis = getRedisClient();
+    if (redis) {
+        try {
+            const cached = await redis.get(`room:${upperCode}`);
+            if (cached) {
+                const parsed = typeof cached === 'string' ? JSON.parse(cached) : cached;
+                activeRooms.set(upperCode, parsed);
+                let token = await redis.get(`room_token:${upperCode}`);
+                if (!token) {
+                    const row = database_1.db
+                        .prepare('SELECT host_token FROM rooms WHERE code = ?')
+                        .get(upperCode);
+                    token = row?.host_token || `tok_${crypto_1.default.randomBytes(18).toString('hex')}`;
+                    await redis.set(`room_token:${upperCode}`, token);
+                }
+                return { state: parsed, hostToken: token };
+            }
+        }
+        catch (err) {
+            console.warn('[Redis] Erro ao buscar sala no Redis:', err);
+        }
+    }
+    const result = loadOrCreateRoom(upperCode, name);
+    if (redis) {
+        try {
+            await redis.set(`room:${upperCode}`, JSON.stringify(result.state));
+            await redis.set(`room_token:${upperCode}`, result.hostToken);
+        }
+        catch { }
+    }
+    return result;
+}
+async function executeHostCommandAsync(payload, defaultRoomCode = 'AB12CD', senderSocketId) {
+    const code = (payload?.code || defaultRoomCode || 'AB12CD').trim().toUpperCase();
+    const { state: currentLoadedState } = await getOrLoadRoomState(code);
+    activeRooms.set(code, currentLoadedState);
+    const result = executeHostCommand(payload, defaultRoomCode, senderSocketId);
+    if (result.ok && result.state) {
+        persistRoomState(result.state);
+    }
+    return result;
 }
 function executeHostCommand(payload, defaultRoomCode = 'AB12CD', senderSocketId) {
     const code = (payload?.code || defaultRoomCode || 'AB12CD').trim().toUpperCase();

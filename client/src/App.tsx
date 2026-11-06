@@ -42,6 +42,8 @@ import type {
 } from './types';
 import {
   api,
+  API_BASE_URL,
+  getTrackStreamUrl,
   getStoredHostPassword,
   getStoredHostToken,
   setStoredHostPassword,
@@ -232,7 +234,7 @@ export const App: React.FC = () => {
         const ambVol = getEffectiveAmbientVolume(state);
         ambAudio.volume = ambVol;
         if (state.ambientTrack && state.ambientTrack.sourceType === 'mp3') {
-          const ambUrl = `/api/tracks/${state.ambientTrack.id}/stream`;
+          const ambUrl = getTrackStreamUrl(state.ambientTrack.id);
           if (activeAmbientIdRef.current !== state.ambientTrack.id) {
             activeAmbientIdRef.current = state.ambientTrack.id;
             ambAudio.src = ambUrl;
@@ -293,7 +295,7 @@ export const App: React.FC = () => {
         if (hadPreviousTrack && fadeSeconds > 0 && !currentDeck.paused) {
           // Crossfade from currentDeck -> nextDeck
           activeDeckRef.current = activeDeckRef.current === 'A' ? 'B' : 'A';
-          nextDeck.src = `/api/tracks/${track.id}/stream`;
+          nextDeck.src = getTrackStreamUrl(track.id);
           nextDeck.currentTime = expectedPos;
           nextDeck.volume = 0;
 
@@ -332,7 +334,7 @@ export const App: React.FC = () => {
             setIsCrossfading(false);
           }
           nextDeck.pause();
-          currentDeck.src = `/api/tracks/${track.id}/stream`;
+          currentDeck.src = getTrackStreamUrl(track.id);
           currentDeck.volume = targetVol;
           currentDeck.onloadedmetadata = () => {
             if (expectedPos > 0 && Math.abs(currentDeck.currentTime - expectedPos) > 1.5) {
@@ -476,12 +478,10 @@ export const App: React.FC = () => {
     [roomCode, applyIncomingRoomState]
   );
 
-  // Connect Socket.IO (when available) + HTTP REST synchronization fallback (for Vercel Serverless)
+  // Connect Socket.IO to backend (Railway / local) + HTTP REST synchronization fallback
   useEffect(() => {
     let isDisposed = false;
     let initialAuthChecked = false;
-    const isServerlessHost =
-      typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app');
 
     const syncViaHttp = async () => {
       const startedAt = Date.now();
@@ -529,26 +529,18 @@ export const App: React.FC = () => {
     // Perform immediate HTTP fetch so room state & auth load right away
     syncViaHttp();
 
-    // Poll every 2.5s whenever Socket.IO is not actively connected
+    // Poll every 1.5s whenever Socket.IO is not actively connected (e.g. Vercel Serverless)
     const httpSyncInterval = window.setInterval(() => {
       if (!socketRef.current?.connected) {
         syncViaHttp();
       }
-    }, 2500);
+    }, 1500);
 
-    if (isServerlessHost) {
-      socketRef.current = null;
-      return () => {
-        isDisposed = true;
-        window.clearInterval(httpSyncInterval);
-      };
-    }
-
-    const socket = io({
+    const socket = io(API_BASE_URL || undefined, {
       path: '/socket.io',
       transports: ['websocket', 'polling'],
       reconnection: true,
-      reconnectionAttempts: 5,
+      reconnectionAttempts: 10,
       reconnectionDelay: 1500,
     });
     socketRef.current = socket;
