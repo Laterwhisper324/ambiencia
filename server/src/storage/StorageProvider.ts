@@ -60,8 +60,12 @@ export class LocalDiskStorageProvider implements StorageProvider {
 
   constructor(uploadDir: string) {
     this.uploadDir = path.resolve(uploadDir);
-    if (!fs.existsSync(this.uploadDir)) {
-      fs.mkdirSync(this.uploadDir, { recursive: true });
+    try {
+      if (!fs.existsSync(this.uploadDir)) {
+        fs.mkdirSync(this.uploadDir, { recursive: true });
+      }
+    } catch (err) {
+      console.warn('[Storage] Aviso ao criar diretório de upload:', err);
     }
   }
 

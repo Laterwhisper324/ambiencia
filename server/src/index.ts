@@ -52,7 +52,11 @@ const seedReadyPromise = ensureSeedData().catch((err) => {
 });
 
 app.use(async (_req, _res, next) => {
-  await seedReadyPromise;
+  try {
+    await seedReadyPromise;
+  } catch (err) {
+    console.error('[Seed Middleware] Erro:', err);
+  }
   next();
 });
 
@@ -144,6 +148,12 @@ if (!process.env.VERCEL) {
       console.log(`========================================================`);
     });
   });
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = app;
+  (module.exports as any).default = app;
+  (module.exports as any).app = app;
 }
 
 export default app;

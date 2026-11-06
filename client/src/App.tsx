@@ -536,6 +536,20 @@ export const App: React.FC = () => {
       }
     }, 1500);
 
+    // On pure Vercel serverless (no external WS URL), rely 100% on fast HTTP polling to avoid WS connection errors in console
+    const isVercelDeployment =
+      typeof window !== 'undefined' &&
+      window.location.hostname.endsWith('.vercel.app') &&
+      !API_BASE_URL;
+
+    if (isVercelDeployment) {
+      socketRef.current = null;
+      return () => {
+        isDisposed = true;
+        window.clearInterval(httpSyncInterval);
+      };
+    }
+
     const socket = io(API_BASE_URL || undefined, {
       path: '/socket.io',
       transports: ['websocket', 'polling'],

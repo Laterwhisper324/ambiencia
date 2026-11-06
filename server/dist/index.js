@@ -51,7 +51,12 @@ const seedReadyPromise = (0, seed_1.ensureSeedData)().catch((err) => {
     console.error('[Seed] Erro ao inicializar dados:', err);
 });
 exports.app.use(async (_req, _res, next) => {
-    await seedReadyPromise;
+    try {
+        await seedReadyPromise;
+    }
+    catch (err) {
+        console.error('[Seed Middleware] Erro:', err);
+    }
     next();
 });
 // General API rate limiter
@@ -128,5 +133,10 @@ if (!process.env.VERCEL) {
             console.log(`========================================================`);
         });
     });
+}
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = exports.app;
+    module.exports.default = exports.app;
+    module.exports.app = exports.app;
 }
 exports.default = exports.app;

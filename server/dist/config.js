@@ -18,15 +18,15 @@ exports.config = {
         .map((origin) => origin.trim())
         .filter(Boolean),
     hostPassword: process.env.HOST_PASSWORD || 'batatinha 123',
-    databasePath: process.env.DATABASE_PATH
-        ? path_1.default.resolve(rootDir, process.env.DATABASE_PATH)
-        : isVercel
-            ? '/tmp/ambiencia.sqlite'
+    databasePath: isVercel
+        ? '/tmp/ambiencia.sqlite'
+        : process.env.DATABASE_PATH
+            ? path_1.default.resolve(rootDir, process.env.DATABASE_PATH)
             : path_1.default.resolve(rootDir, './data/ambiencia.sqlite'),
-    uploadDir: process.env.UPLOAD_DIR
-        ? path_1.default.resolve(rootDir, process.env.UPLOAD_DIR)
-        : isVercel
-            ? '/tmp/uploads'
+    uploadDir: isVercel
+        ? '/tmp/uploads'
+        : process.env.UPLOAD_DIR
+            ? path_1.default.resolve(rootDir, process.env.UPLOAD_DIR)
             : path_1.default.resolve(rootDir, './uploads'),
     maxUploadMb: parseInt(process.env.MAX_UPLOAD_MB || '50', 10),
     get maxUploadBytes() {

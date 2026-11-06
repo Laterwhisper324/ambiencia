@@ -17,15 +17,15 @@ export const config = {
     .map((origin) => origin.trim())
     .filter(Boolean),
   hostPassword: process.env.HOST_PASSWORD || 'batatinha 123',
-  databasePath: process.env.DATABASE_PATH
-    ? path.resolve(rootDir, process.env.DATABASE_PATH)
-    : isVercel
+  databasePath: isVercel
     ? '/tmp/ambiencia.sqlite'
+    : process.env.DATABASE_PATH
+    ? path.resolve(rootDir, process.env.DATABASE_PATH)
     : path.resolve(rootDir, './data/ambiencia.sqlite'),
-  uploadDir: process.env.UPLOAD_DIR
-    ? path.resolve(rootDir, process.env.UPLOAD_DIR)
-    : isVercel
+  uploadDir: isVercel
     ? '/tmp/uploads'
+    : process.env.UPLOAD_DIR
+    ? path.resolve(rootDir, process.env.UPLOAD_DIR)
     : path.resolve(rootDir, './uploads'),
   maxUploadMb: parseInt(process.env.MAX_UPLOAD_MB || '50', 10),
   get maxUploadBytes(): number {

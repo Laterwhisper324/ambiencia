@@ -39,8 +39,13 @@ class LocalDiskStorageProvider {
     uploadDir;
     constructor(uploadDir) {
         this.uploadDir = path_1.default.resolve(uploadDir);
-        if (!fs_1.default.existsSync(this.uploadDir)) {
-            fs_1.default.mkdirSync(this.uploadDir, { recursive: true });
+        try {
+            if (!fs_1.default.existsSync(this.uploadDir)) {
+                fs_1.default.mkdirSync(this.uploadDir, { recursive: true });
+            }
+        }
+        catch (err) {
+            console.warn('[Storage] Aviso ao criar diretório de upload:', err);
         }
     }
     /**

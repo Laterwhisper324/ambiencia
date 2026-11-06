@@ -14,116 +14,136 @@ export const roomsRouter = Router();
 
 // POST /api/rooms/auth - Verify host password or token
 roomsRouter.post('/auth', async (req: Request, res: Response) => {
-  const { password, hostToken, code } = req.body || {};
-  const valid = isValidHostAuth(password, hostToken, code);
-  if (!valid) {
-    res.status(401).json({
-      valid: false,
-      error: 'Senha de anfitrião incorreta.',
+  try {
+    const { password, hostToken, code } = req.body || {};
+    const valid = isValidHostAuth(password, hostToken, code);
+    if (!valid) {
+      res.status(401).json({
+        valid: false,
+        error: 'Senha de anfitrião incorreta.',
+      });
+      return;
+    }
+
+    const roomCode = typeof code === 'string' && code.trim() ? code.trim().toUpperCase() : 'AB12CD';
+    const { state, hostToken: roomToken } = await getOrLoadRoomState(roomCode);
+    const now = Date.now();
+
+    res.json({
+      valid: true,
+      roomCode: state.code,
+      hostToken: roomToken,
+      state: {
+        ...state,
+        positionSec: computeCurrentPosition(state, now),
+        updatedAt: now,
+        serverNow: now,
+      },
     });
-    return;
+  } catch (err) {
+    console.error('[Rooms /auth Error]:', err);
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Erro ao autenticar sala.' });
   }
-
-  const roomCode = typeof code === 'string' && code.trim() ? code.trim().toUpperCase() : 'AB12CD';
-  const { state, hostToken: roomToken } = await getOrLoadRoomState(roomCode);
-  const now = Date.now();
-
-  res.json({
-    valid: true,
-    roomCode: state.code,
-    hostToken: roomToken,
-    state: {
-      ...state,
-      positionSec: computeCurrentPosition(state, now),
-      updatedAt: now,
-      serverNow: now,
-    },
-  });
 });
 
 // POST /api/rooms - Create a new room (returns short code and hostToken)
 roomsRouter.post('/', async (req: Request, res: Response) => {
-  const password = (req.headers['x-host-password'] as string) || req.body?.password;
-  const token = (req.headers['x-host-token'] as string) || req.body?.hostToken;
+  try {
+    const password = (req.headers['x-host-password'] as string) || req.body?.password;
+    const token = (req.headers['x-host-token'] as string) || req.body?.hostToken;
 
-  // Allow creating a room with valid password/token OR generate a new room token directly
-  const customCode =
-    typeof req.body?.code === 'string' && /^[A-Za-z0-9]{4,10}$/.test(req.body.code.trim())
-      ? req.body.code.trim().toUpperCase()
-      : undefined;
-  const name = typeof req.body?.name === 'string' ? req.body.name.trim() : undefined;
+    // Allow creating a room with valid password/token OR generate a new room token directly
+    const customCode =
+      typeof req.body?.code === 'string' && /^[A-Za-z0-9]{4,10}$/.test(req.body.code.trim())
+        ? req.body.code.trim().toUpperCase()
+        : undefined;
+    const name = typeof req.body?.name === 'string' ? req.body.name.trim() : undefined;
 
-  if (customCode) {
-    if (!isValidHostAuth(password, token, customCode)) {
-      res.status(401).json({
-        error: 'Informe a senha do anfitrião para criar ou assumir uma sala com código personalizado.',
+    if (customCode) {
+      if (!isValidHostAuth(password, token, customCode)) {
+        res.status(401).json({
+          error: 'Informe a senha do anfitrião para criar ou assumir uma sala com código personalizado.',
+        });
+        return;
+      }
+      const { state, hostToken } = await getOrLoadRoomState(customCode, name);
+      res.status(201).json({
+        state,
+        hostToken,
+        sharePath: `/sala/${state.code}`,
       });
       return;
     }
-    const { state, hostToken } = await getOrLoadRoomState(customCode, name);
+
+    const { state, hostToken } = createNewRoom(name);
+    persistRoomState(state);
     res.status(201).json({
       state,
       hostToken,
       sharePath: `/sala/${state.code}`,
     });
-    return;
+  } catch (err) {
+    console.error('[Rooms POST Error]:', err);
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Erro ao criar sala.' });
   }
-
-  const { state, hostToken } = createNewRoom(name);
-  persistRoomState(state);
-  res.status(201).json({
-    state,
-    hostToken,
-    sharePath: `/sala/${state.code}`,
-  });
 });
 
 // GET /api/rooms/:code - Fetch room state & record active listener heartbeat
 roomsRouter.get('/:code', async (req: Request, res: Response) => {
-  const code = req.params.code.trim().toUpperCase();
-  const clientId = typeof req.query.clientId === 'string' ? req.query.clientId : undefined;
-  const password = req.headers['x-host-password'] as string | undefined;
-  const token = req.headers['x-host-token'] as string | undefined;
+  try {
+    const code = req.params.code.trim().toUpperCase();
+    const clientId = typeof req.query.clientId === 'string' ? req.query.clientId : undefined;
+    const password = req.headers['x-host-password'] as string | undefined;
+    const token = req.headers['x-host-token'] as string | undefined;
 
-  const { state, hostToken } = await getOrLoadRoomState(code);
-  const listenerCount = touchRoomClient(code, clientId);
-  state.listenerCount = listenerCount;
-  const isHost = isValidHostAuth(password, token, code);
-  const now = Date.now();
+    const { state, hostToken } = await getOrLoadRoomState(code);
+    const listenerCount = touchRoomClient(code, clientId);
+    state.listenerCount = listenerCount;
+    const isHost = isValidHostAuth(password, token, code);
+    const now = Date.now();
 
-  res.json({
-    state: {
-      ...state,
-      listenerCount,
-      positionSec: computeCurrentPosition(state, now),
-      updatedAt: now,
-      serverNow: now,
-    },
-    isHost,
-    hostToken: isHost ? hostToken : undefined,
-  });
+    res.json({
+      state: {
+        ...state,
+        listenerCount,
+        positionSec: computeCurrentPosition(state, now),
+        updatedAt: now,
+        serverNow: now,
+      },
+      isHost,
+      hostToken: isHost ? hostToken : undefined,
+    });
+  } catch (err) {
+    console.error('[Rooms GET /:code Error]:', err);
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Erro ao carregar sala.' });
+  }
 });
 
 // POST /api/rooms/:code/command - Execute host playback command via HTTP (for serverless / fallback)
 roomsRouter.post('/:code/command', async (req: Request, res: Response) => {
-  const code = req.params.code.trim().toUpperCase();
-  const password = (req.headers['x-host-password'] as string) || req.body?.password;
-  const hostToken = (req.headers['x-host-token'] as string) || req.body?.hostToken;
+  try {
+    const code = req.params.code.trim().toUpperCase();
+    const password = (req.headers['x-host-password'] as string) || req.body?.password;
+    const hostToken = (req.headers['x-host-token'] as string) || req.body?.hostToken;
 
-  const result = await executeHostCommandAsync(
-    {
-      ...req.body,
-      code,
-      password,
-      hostToken,
-    },
-    code
-  );
+    const result = await executeHostCommandAsync(
+      {
+        ...req.body,
+        code,
+        password,
+        hostToken,
+      },
+      code
+    );
 
-  if (!result.ok) {
-    res.status(401).json(result);
-    return;
+    if (!result.ok) {
+      res.status(401).json(result);
+      return;
+    }
+
+    res.json(result);
+  } catch (err) {
+    console.error('[Rooms command Error]:', err);
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Erro ao executar comando.' });
   }
-
-  res.json(result);
 });
