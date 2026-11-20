@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: ambiencia
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: npm run render-build
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: 22.12.0
+      - key: HOST_PASSWORD
+        generateValue: true
+      - key: STORAGE_PROVIDER
+        value: local
+      - key: CORS_ORIGINS
+        value: "*"

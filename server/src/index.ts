@@ -95,8 +95,16 @@ app.use('/rooms', roomsRouter);
 
 // Serve static frontend in standalone production (when client/dist exists)
 if (!process.env.VERCEL) {
-  const clientDistPath = path.resolve(process.cwd(), '../client/dist');
-  if (fs.existsSync(clientDistPath)) {
+  const candidateDistPaths = [
+    path.resolve(process.cwd(), 'client/dist'),
+    path.resolve(process.cwd(), '../client/dist'),
+    path.resolve(__dirname, '../../client/dist'),
+    path.resolve(__dirname, '../client/dist'),
+  ];
+  const clientDistPath = candidateDistPaths.find((p) => fs.existsSync(p));
+
+  if (clientDistPath) {
+    console.log(`[Frontend] Servindo arquivos estáticos de: ${clientDistPath}`);
     app.use(express.static(clientDistPath));
     app.get('*', (req, res, next) => {
       if (req.path.startsWith('/api') || req.path.startsWith('/socket.io')) {
@@ -105,6 +113,8 @@ if (!process.env.VERCEL) {
       }
       res.sendFile(path.join(clientDistPath, 'index.html'));
     });
+  } else {
+    console.warn('[Frontend] Pasta client/dist não encontrada. Inicie após npm run build.');
   }
 }
 
