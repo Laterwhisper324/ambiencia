@@ -17,10 +17,13 @@ import {
 } from 'lucide-react';
 import type { Playlist, Track } from '../types';
 import { api } from '../services/api';
+import { CloudBackupPanel } from './CloudBackupPanel';
 
 interface Props {
   tracks: Track[];
   playlists: Playlist[];
+  activeProfileId: string;
+  activeProfileName?: string;
   maxUploadMb: number;
   currentTrackId: string | null;
   onPlayTrack: (track: Track) => void;
@@ -51,6 +54,8 @@ function getAudioDurationFromFile(file: File): Promise<number> {
 export const LibraryView: React.FC<Props> = ({
   tracks,
   playlists,
+  activeProfileId,
+  activeProfileName,
   maxUploadMb,
   currentTrackId,
   onPlayTrack,
@@ -169,6 +174,7 @@ export const LibraryView: React.FC<Props> = ({
         url: ytUrl.trim(),
         title: ytCustomTitle.trim() || undefined,
         tags,
+        profileId: activeProfileId,
       });
 
       await onRefreshData();
@@ -400,6 +406,9 @@ export const LibraryView: React.FC<Props> = ({
         </form>
       </div>
 
+      {/* Cloud Persistence (Upstash Redis) & Manual JSON Export/Import */}
+      <CloudBackupPanel onRefreshData={onRefreshData} />
+
       {/* Search & Filter Controls */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-[#141417] border border-[#2a2a33] rounded-md p-3">
         <div className="relative flex-1">
@@ -610,19 +619,25 @@ export const LibraryView: React.FC<Props> = ({
                         </button>
 
                         {addingToPlaylistTrackId === track.id && (
-                          <div className="absolute right-0 mt-1 w-52 rounded-lg border border-[#2a2a33] bg-[#141417] shadow-2xl py-1.5 z-30 animate-in fade-in">
-                            <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-[#cbd5e1] border-b border-[#24242b]">
-                              Adicionar em:
+                          <div className="absolute right-0 mt-1 w-56 rounded-lg border border-[#2a2a33] bg-[#141417] shadow-2xl py-1.5 z-30 animate-in fade-in">
+                            <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-[#cbd5e1] border-b border-[#24242b] truncate">
+                              {activeProfileName ? `Playlists de ${activeProfileName}:` : 'Adicionar em:'}
                             </div>
-                            {playlists.map((pl) => (
-                              <button
-                                key={pl.id}
-                                onClick={() => handleQuickAddToPlaylist(pl.id, track.id)}
-                                className="taste-btn w-full text-left px-3 py-1.5 text-xs text-[#f0f4f5] hover:bg-[#cc001e]/20 hover:text-white truncate"
-                              >
-                                {pl.name}
-                              </button>
-                            ))}
+                            {playlists.length === 0 ? (
+                              <div className="px-3 py-2 text-[11px] text-[#94a3b8]">
+                                Crie uma playlist para este perfil na barra lateral primeiro.
+                              </div>
+                            ) : (
+                              playlists.map((pl) => (
+                                <button
+                                  key={pl.id}
+                                  onClick={() => handleQuickAddToPlaylist(pl.id, track.id)}
+                                  className="taste-btn w-full text-left px-3 py-1.5 text-xs text-[#f0f4f5] hover:bg-[#cc001e]/20 hover:text-white truncate"
+                                >
+                                  {pl.name}
+                                </button>
+                              ))
+                            )}
                           </div>
                         )}
                       </div>

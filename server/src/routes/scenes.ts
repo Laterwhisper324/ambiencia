@@ -1,18 +1,25 @@
 import { Router, type Request, type Response } from 'express';
 import crypto from 'crypto';
-import { db, getAllScenes, getSceneById } from '../db/database';
+import {
+  db,
+  getAllScenes,
+  getSceneById,
+  notifyDbChanged,
+  resolveValidProfileId,
+} from '../db/database';
 import { requireHostAuth } from '../middleware/auth';
 
 export const scenesRouter = Router();
 
-// GET /api/scenes
-scenesRouter.get('/', (_req: Request, res: Response) => {
-  res.json({ scenes: getAllScenes() });
+// GET /api/scenes (optionally filtered by ?profileId=...)
+scenesRouter.get('/', (req: Request, res: Response) => {
+  const profileId = typeof req.query.profileId === 'string' ? req.query.profileId : undefined;
+  res.json({ scenes: getAllScenes(profileId) });
 });
 
 // POST /api/scenes
 scenesRouter.post('/', requireHostAuth, (req: Request, res: Response) => {
-  const { name, emoji, color, playlistId, ambientTrackId, ambientVolume, shortcutKey } =
+  const { name, emoji, color, playlistId, ambientTrackId, ambientVolume, shortcutKey, profileId } =
     req.body || {};
 
   if (!name || typeof name !== 'string' || !name.trim()) {
@@ -20,7 +27,9 @@ scenesRouter.post('/', requireHostAuth, (req: Request, res: Response) => {
     return;
   }
 
-  const allScenes = getAllScenes();
+  const headerProfileId = req.headers['x-master-profile-id'] as string | undefined;
+  const resolvedProfileId = resolveValidProfileId(profileId || headerProfileId);
+  const profileScenes = getAllScenes(resolvedProfileId);
   const id = `scene-${crypto.randomUUID()}`;
   const now = new Date().toISOString();
   const safeEmoji = typeof emoji === 'string' && emoji.trim() ? emoji.trim().slice(0, 8) : '🎭';
@@ -34,16 +43,17 @@ scenesRouter.post('/', requireHostAuth, (req: Request, res: Response) => {
   const safeShortcut =
     typeof shortcutKey === 'number' && shortcutKey >= 1 && shortcutKey <= 9
       ? shortcutKey
-      : allScenes.length < 9
-      ? allScenes.length + 1
+      : profileScenes.length < 9
+      ? profileScenes.length + 1
       : null;
 
   db.prepare(`
     INSERT INTO scene_buttons (
-      id, name, emoji, color, playlist_id, ambient_track_id, ambient_volume, shortcut_key, position, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      id, profile_id, name, emoji, color, playlist_id, ambient_track_id, ambient_volume, shortcut_key, position, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
+    resolvedProfileId,
     name.trim().slice(0, 60),
     safeEmoji,
     safeColor,
@@ -51,10 +61,11 @@ scenesRouter.post('/', requireHostAuth, (req: Request, res: Response) => {
     safeAmbientId,
     safeAmbientVol,
     safeShortcut,
-    allScenes.length,
+    profileScenes.length,
     now
   );
 
+  notifyDbChanged();
   res.status(201).json({ scene: getSceneById(id) });
 });
 
@@ -108,6 +119,7 @@ scenesRouter.patch('/:id', requireHostAuth, (req: Request, res: Response) => {
     existing.id
   );
 
+  notifyDbChanged();
   res.json({ scene: getSceneById(existing.id) });
 });
 
@@ -120,5 +132,6 @@ scenesRouter.delete('/:id', requireHostAuth, (req: Request, res: Response) => {
   }
 
   db.prepare('DELETE FROM scene_buttons WHERE id = ?').run(existing.id);
+  notifyDbChanged();
   res.json({ ok: true });
 });

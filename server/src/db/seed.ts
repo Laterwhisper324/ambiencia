@@ -1,15 +1,43 @@
-import { db, initSchema } from './database';
+import { db, DEFAULT_PROFILE_ID, ensureDefaultProfile, initSchema } from './database';
+import { hydrateFromCloudOnStartup } from './cloudPersistence';
 import { getStorageProvider } from '../storage/StorageProvider';
 import { generateDemoAudioBuffer, type SynthPreset } from '../utils/demoAudioGenerator';
 import type { RoomPlaybackState } from '../types';
 
+function ensureDefaultRoom(now: string): void {
+  const defaultState: RoomPlaybackState = {
+    code: 'AB12CD',
+    name: 'Mesa Principal — Crônicas de Ambiência',
+    activeSceneId: 'scene-floresta',
+    activePlaylistId: 'playlist-exploracao',
+    currentTrack: null,
+    queue: [],
+    currentIndex: 0,
+    isPlaying: false,
+    positionSec: 0,
+    updatedAt: Date.now(),
+    serverNow: Date.now(),
+    volume: 0.85,
+    shuffle: false,
+    repeatMode: 'playlist',
+    crossfadeSec: 3,
+    ambientTrack: null,
+    ambientIsPlaying: false,
+    ambientVolume: 0.35,
+    listenerCount: 0,
+  };
+
+  db.prepare(`
+    INSERT OR IGNORE INTO rooms (code, name, host_token, state_json, created_at)
+    VALUES (?, ?, ?, ?, ?)
+  `).run('AB12CD', defaultState.name, 'default-host-token-ab12cd', JSON.stringify(defaultState), now);
+}
+
 export async function ensureSeedData(): Promise<void> {
   initSchema();
+  ensureDefaultProfile();
 
-  const existingCount = db
-    .prepare('SELECT COUNT(*) as total FROM playlists')
-    .get() as { total: number };
-
+  const now = new Date().toISOString();
   const storage = getStorageProvider();
 
   // Always ensure demo audio files exist on disk so pre-seeded tracks never 404
@@ -87,21 +115,6 @@ export async function ensureSeedData(): Promise<void> {
     },
   ];
 
-  for (const item of demoFiles) {
-    const exists = await storage.fileExists(item.filename);
-    if (!exists) {
-      const buf = generateDemoAudioBuffer(item.preset, item.durationSec);
-      await storage.saveFile(buf, item.filename, 'audio/wav', item.filename);
-    }
-  }
-
-  if (existingCount.total > 0) {
-    return;
-  }
-
-  console.log('[Seed] Populando banco de dados SQLite com faixas, playlists e cenas de exemplo...');
-  const now = new Date().toISOString();
-
   const insertTrack = db.prepare(`
     INSERT OR IGNORE INTO tracks (
       id, title, source_type, storage_key, original_filename, mime_type,
@@ -110,6 +123,12 @@ export async function ensureSeedData(): Promise<void> {
   `);
 
   for (const item of demoFiles) {
+    const exists = await storage.fileExists(item.filename);
+    if (!exists) {
+      const buf = generateDemoAudioBuffer(item.preset, item.durationSec);
+      await storage.saveFile(buf, item.filename, 'audio/wav', item.filename);
+    }
+    // Always ensure built-in demo track rows exist before hydrating cloud scenes/playlists
     const approxBytes = 44 + 22050 * item.durationSec * 2;
     insertTrack.run(
       item.id,
@@ -128,6 +147,24 @@ export async function ensureSeedData(): Promise<void> {
       now
     );
   }
+
+  // Hydrate persisted profiles, link tracks, playlists & scenes from Upstash Redis (if configured)
+  const hydratedFromCloud = await hydrateFromCloudOnStartup();
+  ensureDefaultRoom(now);
+
+  if (hydratedFromCloud) {
+    return;
+  }
+
+  const existingCount = db
+    .prepare('SELECT COUNT(*) as total FROM playlists')
+    .get() as { total: number };
+
+  if (existingCount.total > 0) {
+    return;
+  }
+
+  console.log('[Seed] Populando banco de dados SQLite com faixas, playlists e cenas de exemplo...');
 
   // Add curated YouTube tracks (reproduzidos exclusivamente pela YouTube IFrame Player API)
   insertTrack.run(
@@ -166,12 +203,13 @@ export async function ensureSeedData(): Promise<void> {
 
   // Create 3 example Playlists (minimum required: 2)
   const insertPlaylist = db.prepare(`
-    INSERT INTO playlists (id, name, description, created_at)
-    VALUES (?, ?, ?, ?)
+    INSERT INTO playlists (id, profile_id, name, description, created_at)
+    VALUES (?, ?, ?, ?, ?)
   `);
 
   insertPlaylist.run(
     'playlist-exploracao',
+    DEFAULT_PROFILE_ID,
     'Exploração & Ermos',
     'Trilhas serenas e misteriosas para viagens por florestas, costas marítimas e ruínas antigas.',
     now
@@ -179,6 +217,7 @@ export async function ensureSeedData(): Promise<void> {
 
   insertPlaylist.run(
     'playlist-combate',
+    DEFAULT_PROFILE_ID,
     'Combate & Masmorras',
     'Percussão intensa e atmosferas tensas para iniciativa, chefes e exploração de masmorras.',
     now
@@ -186,6 +225,7 @@ export async function ensureSeedData(): Promise<void> {
 
   insertPlaylist.run(
     'playlist-taverna',
+    DEFAULT_PROFILE_ID,
     'Taverna & Descanso Curto',
     'Música acolhedora de alaúde e violão para interações sociais em cidades e estalagens.',
     now
@@ -214,8 +254,8 @@ export async function ensureSeedData(): Promise<void> {
   // Create 6 Scene Buttons (minimum required: 3, covering all examples from prompt)
   const insertScene = db.prepare(`
     INSERT INTO scene_buttons (
-      id, name, emoji, color, playlist_id, ambient_track_id, ambient_volume, shortcut_key, position, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      id, profile_id, name, emoji, color, playlist_id, ambient_track_id, ambient_volume, shortcut_key, position, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const scenes = [
@@ -290,6 +330,7 @@ export async function ensureSeedData(): Promise<void> {
   for (const sc of scenes) {
     insertScene.run(
       sc.id,
+      DEFAULT_PROFILE_ID,
       sc.name,
       sc.emoji,
       sc.color,
@@ -301,34 +342,6 @@ export async function ensureSeedData(): Promise<void> {
       now
     );
   }
-
-  // Create default demonstration room AB12CD
-  const defaultState: RoomPlaybackState = {
-    code: 'AB12CD',
-    name: 'Mesa Principal — Crônicas de Ambiência',
-    activeSceneId: 'scene-floresta',
-    activePlaylistId: 'playlist-exploracao',
-    currentTrack: null,
-    queue: [],
-    currentIndex: 0,
-    isPlaying: false,
-    positionSec: 0,
-    updatedAt: Date.now(),
-    serverNow: Date.now(),
-    volume: 0.85,
-    shuffle: false,
-    repeatMode: 'playlist',
-    crossfadeSec: 3,
-    ambientTrack: null,
-    ambientIsPlaying: false,
-    ambientVolume: 0.35,
-    listenerCount: 0,
-  };
-
-  db.prepare(`
-    INSERT OR IGNORE INTO rooms (code, name, host_token, state_json, created_at)
-    VALUES (?, ?, ?, ?, ?)
-  `).run('AB12CD', defaultState.name, 'default-host-token-ab12cd', JSON.stringify(defaultState), now);
 
   console.log('[Seed] Dados iniciais criados com sucesso (Sala padrão: AB12CD).');
 }

@@ -31,9 +31,12 @@ import {
   Share2,
   Menu,
   X,
+  ChevronDown,
+  UserCog,
 } from 'lucide-react';
 import type {
   ConnectionStatus,
+  MasterProfile,
   Playlist,
   RepeatMode,
   RoomPlaybackState,
@@ -46,8 +49,10 @@ import {
   getTrackStreamUrl,
   getStoredHostPassword,
   getStoredHostToken,
+  getStoredProfileId,
   setStoredHostPassword,
   setStoredHostToken,
+  setStoredProfileId,
 } from './services/api';
 import {
   YouTubeEmbedPlayer,
@@ -56,6 +61,7 @@ import {
 import { SceneModal } from './components/SceneModal';
 import { LibraryView } from './components/LibraryView';
 import { PlaylistEditorView } from './components/PlaylistEditorView';
+import { ProfileManagerModal } from './components/ProfileManagerModal';
 import { WalrusLogo } from './components/WalrusLogo';
 import { InteractiveBackground } from './components/InteractiveBackground';
 import { AnimatedPlayButton } from './components/AnimatedPlayButton';
@@ -94,7 +100,12 @@ export const App: React.FC = () => {
   const [listenerUnlocked, setListenerUnlocked] = useState<boolean>(!initialRoute.isListenerRoute);
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
 
-  // Catalog state
+  // Catalog & Master Profiles state
+  const [profiles, setProfiles] = useState<MasterProfile[]>([]);
+  const [activeProfileId, setActiveProfileId] = useState<string>(
+    () => getStoredProfileId() || 'profile-default'
+  );
+  const [profileModalOpen, setProfileModalOpen] = useState<boolean>(false);
   const [tracks, setTracks] = useState<Track[]>([]);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [scenes, setScenes] = useState<SceneButton[]>([]);
@@ -123,8 +134,13 @@ export const App: React.FC = () => {
   const [creatingPlaylist, setCreatingPlaylist] = useState<boolean>(false);
   const [copiedLink, setCopiedLink] = useState<boolean>(false);
   const [authModalOpen, setAuthModalOpen] = useState<boolean>(false);
+  const [authStep, setAuthStep] = useState<'password' | 'profile'>('password');
   const [passwordInput, setPasswordInput] = useState<string>('');
   const [authError, setAuthError] = useState<string | null>(null);
+  const [pendingHostState, setPendingHostState] = useState<RoomPlaybackState | null>(null);
+  const [quickProfileName, setQuickProfileName] = useState<string>('');
+  const [quickProfileAvatar, setQuickProfileAvatar] = useState<string>('🧙');
+  const [creatingQuickProfile, setCreatingQuickProfile] = useState<boolean>(false);
   const [joinCodeInput, setJoinCodeInput] = useState<string>(initialRoute.roomCode);
 
   // Audio Engine Refs: Dual Deck (A & B) for MP3 Crossfade + Ambient Loop Deck + YouTube IFrame Bridge
@@ -165,23 +181,53 @@ export const App: React.FC = () => {
     isPlaying: false,
   });
 
-  // Fetch initial catalog (tracks, playlists, scenes)
-  const refreshCatalog = useCallback(async () => {
-    try {
-      const [tracksRes, playlistsRes, scenesRes] = await Promise.all([
-        api.getTracks(),
-        api.getPlaylists(),
-        api.getScenes(),
-      ]);
-      setTracks(tracksRes.tracks);
-      setMaxUploadMb(tracksRes.maxUploadMb || 50);
-      setPlaylists(playlistsRes.playlists);
-      setScenes(scenesRes.scenes);
-    } catch (err) {
-      console.error('Erro ao carregar catálogo:', err);
-    } finally {
-      setLoadingCatalog(false);
-    }
+  // Fetch catalog (profiles, tracks, playlists, scenes) scoped to the active Master Profile when in Host mode
+  const refreshCatalog = useCallback(
+    async (profileOverride?: string) => {
+      try {
+        const profilesRes = await api.getProfiles();
+        const fetchedProfiles = profilesRes.profiles || [];
+        setProfiles(fetchedProfiles);
+
+        const desiredProfileId = profileOverride || activeProfileId;
+        const matchedProfile =
+          fetchedProfiles.find((p) => p.id === desiredProfileId) || fetchedProfiles[0];
+        const effectiveProfileId = matchedProfile?.id || 'profile-default';
+
+        if (effectiveProfileId && effectiveProfileId !== activeProfileId) {
+          setActiveProfileId(effectiveProfileId);
+          setStoredProfileId(effectiveProfileId);
+        }
+
+        const filterProfileId = isHost ? effectiveProfileId : undefined;
+        const [tracksRes, playlistsRes, scenesRes] = await Promise.all([
+          api.getTracks(),
+          api.getPlaylists(filterProfileId),
+          api.getScenes(filterProfileId),
+        ]);
+        setTracks(tracksRes.tracks);
+        setMaxUploadMb(tracksRes.maxUploadMb || 50);
+        setPlaylists(playlistsRes.playlists);
+        setScenes(scenesRes.scenes);
+      } catch (err) {
+        console.error('Erro ao carregar catálogo:', err);
+      } finally {
+        setLoadingCatalog(false);
+      }
+    },
+    [activeProfileId, isHost]
+  );
+
+  const handleSelectProfile = useCallback((profileId: string) => {
+    setStoredProfileId(profileId);
+    setActiveProfileId(profileId);
+    setSelectedPlaylistId(null);
+  }, []);
+
+  const handleProfilesChanged = useCallback(async (): Promise<MasterProfile[]> => {
+    const res = await api.getProfiles();
+    setProfiles(res.profiles);
+    return res.profiles;
   }, []);
 
   useEffect(() => {
@@ -796,12 +842,15 @@ export const App: React.FC = () => {
     }
   };
 
-  // Create new playlist from sidebar
+  // Create new playlist from sidebar (scoped to active Master Profile)
   const handleCreatePlaylist = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPlaylistName.trim()) return;
     try {
-      const { playlist } = await api.createPlaylist({ name: newPlaylistName.trim() });
+      const { playlist } = await api.createPlaylist({
+        name: newPlaylistName.trim(),
+        profileId: activeProfileId,
+      });
       setNewPlaylistName('');
       setCreatingPlaylist(false);
       await refreshCatalog();
@@ -812,7 +861,7 @@ export const App: React.FC = () => {
     }
   };
 
-  // Verify host password in modal
+  // Step 1: Verify universal master password, then let GM choose or create their profile
   const handleHostLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
@@ -822,20 +871,60 @@ export const App: React.FC = () => {
         setStoredHostPassword(passwordInput);
         if (res.hostToken) setStoredHostToken(res.hostToken);
         setPasswordInput('');
-        setIsHost(true);
-        setListenerUnlocked(true);
-        setConnStatus('connected');
-        setAuthModalOpen(false);
-        if (res.state) {
-          applyIncomingRoomState(res.state);
+        setPendingHostState(res.state || null);
+        try {
+          const profRes = await api.getProfiles();
+          setProfiles(profRes.profiles);
+        } catch {
+          // Ignore and continue with currently loaded profiles
         }
-        if (viewMode === 'listener') setViewMode('scenes');
+        setAuthStep('profile');
       }
     } catch (err) {
       setAuthError(err instanceof Error ? err.message : 'Senha inválida.');
     }
   };
 
+  // Step 2: Finish Host login using the selected Master Profile
+  const handleCompleteHostProfileSelection = (profileId: string) => {
+    setStoredProfileId(profileId);
+    setActiveProfileId(profileId);
+    setSelectedPlaylistId(null);
+    setIsHost(true);
+    setListenerUnlocked(true);
+    setConnStatus('connected');
+    setAuthModalOpen(false);
+    setAuthStep('password');
+    if (pendingHostState) {
+      applyIncomingRoomState(pendingHostState);
+      setPendingHostState(null);
+    }
+    if (viewMode === 'listener') setViewMode('scenes');
+  };
+
+  const handleQuickCreateProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickProfileName.trim()) return;
+    setCreatingQuickProfile(true);
+    setAuthError(null);
+    try {
+      const { profile } = await api.createProfile({
+        name: quickProfileName.trim(),
+        avatar: quickProfileAvatar,
+        color: '#cc001e',
+      });
+      setQuickProfileName('');
+      await handleProfilesChanged();
+      handleCompleteHostProfileSelection(profile.id);
+    } catch (err) {
+      setAuthError(err instanceof Error ? err.message : 'Erro ao criar perfil de mestre.');
+    } finally {
+      setCreatingQuickProfile(false);
+    }
+  };
+
+  const activeProfile =
+    profiles.find((p) => p.id === activeProfileId) || profiles[0] || null;
   const activeScene = scenes.find((s) => s.id === roomState?.activeSceneId) || null;
   const activePlaylist =
     playlists.find((p) => p.id === (selectedPlaylistId || roomState?.activePlaylistId)) ||
@@ -1037,6 +1126,25 @@ export const App: React.FC = () => {
               </button>
             )}
 
+            {/* Master Profile Switcher */}
+            {isHost && activeProfile && (
+              <button
+                onClick={() => setProfileModalOpen(true)}
+                className="taste-btn inline-flex items-center gap-1.5 rounded-lg border border-[#2a2a33] bg-[#141417] hover:border-[#cc001e] hover:bg-[#1d181b] px-2.5 py-1 text-xs font-semibold text-[#f0f4f5] transition"
+                title={`Perfil ativo: ${activeProfile.name} (clique para trocar ou criar perfis de mestre)`}
+              >
+                <span className="text-sm leading-none">{activeProfile.avatar}</span>
+                <span
+                  className="w-2 h-2 rounded-full shrink-0"
+                  style={{ backgroundColor: activeProfile.color || '#cc001e' }}
+                />
+                <span className="max-w-[110px] truncate hidden sm:inline">
+                  {activeProfile.name}
+                </span>
+                <ChevronDown className="w-3.5 h-3.5 text-[#cbd5e1]" />
+              </button>
+            )}
+
             {/* Host Mode Toggle */}
             <button
               onClick={() => {
@@ -1044,6 +1152,8 @@ export const App: React.FC = () => {
                   setIsHost(false);
                   setViewMode('listener');
                 } else {
+                  setAuthStep('password');
+                  setAuthError(null);
                   setAuthModalOpen(true);
                 }
               }}
@@ -1110,6 +1220,38 @@ export const App: React.FC = () => {
                   <X className="w-4 h-4" />
                 </button>
               </div>
+            {/* Active Master Profile Card in Sidebar */}
+            {activeProfile && (
+              <div
+                onClick={() => setProfileModalOpen(true)}
+                className="taste-card rounded-lg border border-[#2a2a33] bg-[#141417] hover:border-[#cc001e]/70 p-3 cursor-pointer transition flex items-center justify-between gap-2.5"
+                title="Trocar ou gerenciar perfis de mestre"
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div
+                    className="w-9 h-9 rounded-md flex items-center justify-center text-lg shrink-0 border"
+                    style={{
+                      backgroundColor: `${activeProfile.color || '#cc001e'}1a`,
+                      borderColor: `${activeProfile.color || '#cc001e'}55`,
+                    }}
+                  >
+                    {activeProfile.avatar}
+                  </div>
+                  <div className="min-w-0">
+                    <span className="block text-[9px] font-mono uppercase tracking-wider text-[#cc001e] font-bold">
+                      Perfil do Mestre
+                    </span>
+                    <p className="text-xs font-extrabold text-[#f0f4f5] truncate">
+                      {activeProfile.name}
+                    </p>
+                  </div>
+                </div>
+                <span className="text-[10px] font-semibold px-2 py-1 rounded-md bg-[#1f1f26] border border-[#2a2a33] text-[#cbd5e1] shrink-0">
+                  Trocar
+                </span>
+              </div>
+            )}
+
             {/* Playlists Section */}
             <div>
               <div className="flex items-center justify-between mb-3">
@@ -1145,6 +1287,19 @@ export const App: React.FC = () => {
               )}
 
               <div className="space-y-1.5">
+                {playlists.length === 0 && (
+                  <div className="rounded-lg border border-dashed border-[#2a2a33] bg-[#141417]/60 px-3 py-4 text-center">
+                    <p className="text-[11px] text-[#cbd5e1]">
+                      Nenhuma playlist neste perfil ainda.
+                    </p>
+                    <button
+                      onClick={() => setCreatingPlaylist(true)}
+                      className="mt-2 text-[11px] font-bold text-[#cc001e] hover:underline"
+                    >
+                      + Criar primeira playlist
+                    </button>
+                  </div>
+                )}
                 {playlists.map((pl) => {
                   const isPlayingPl = roomState?.activePlaylistId === pl.id;
                   const isSelected =
@@ -1516,29 +1671,54 @@ export const App: React.FC = () => {
                 </div>
               )}
             </div>
-          ) : viewMode === 'playlist' && isHost && activePlaylist ? (
+          ) : viewMode === 'playlist' && isHost ? (
             /* ==================== PLAYLIST EDITOR VIEW ==================== */
-            <PlaylistEditorView
-              playlist={activePlaylist}
-              allTracks={tracks}
-              currentTrackId={roomState?.currentTrack?.id || null}
-              onPlayPlaylist={(pl, idx = 0) => {
-                setListenerUnlocked(true);
-                sendHostCommand('set_playlist', { playlistId: pl.id });
-                if (idx > 0 && pl.tracks[idx]) {
-                  setTimeout(() => {
-                    sendHostCommand('set_track', { trackId: pl.tracks[idx].id });
-                  }, 150);
-                }
-              }}
-              onRefreshData={refreshCatalog}
-              onSelectPlaylistId={setSelectedPlaylistId}
-            />
+            activePlaylist ? (
+              <PlaylistEditorView
+                playlist={activePlaylist}
+                allTracks={tracks}
+                activeProfileId={activeProfileId}
+                currentTrackId={roomState?.currentTrack?.id || null}
+                onPlayPlaylist={(pl, idx = 0) => {
+                  setListenerUnlocked(true);
+                  sendHostCommand('set_playlist', { playlistId: pl.id });
+                  if (idx > 0 && pl.tracks[idx]) {
+                    setTimeout(() => {
+                      sendHostCommand('set_track', { trackId: pl.tracks[idx].id });
+                    }, 150);
+                  }
+                }}
+                onRefreshData={refreshCatalog}
+                onSelectPlaylistId={setSelectedPlaylistId}
+              />
+            ) : (
+              <div className="rounded-md border border-[#2a2a33] bg-[#141417] p-12 text-center space-y-3">
+                <ListMusic className="w-9 h-9 text-[#cc001e] mx-auto" />
+                <h2 className="text-base font-extrabold text-[#f0f4f5]">
+                  Nenhuma playlist no perfil {activeProfile?.name || 'atual'}
+                </h2>
+                <p className="text-xs text-[#cbd5e1] max-w-md mx-auto">
+                  Cada mestre possui suas próprias playlists separadas. Crie sua primeira playlist agora ou importe uma playlist do YouTube na Biblioteca.
+                </p>
+                <button
+                  onClick={() => {
+                    setCreatingPlaylist(true);
+                    setSidebarOpen(true);
+                  }}
+                  className="taste-btn inline-flex items-center gap-2 rounded-lg bg-[#cc001e] hover:bg-[#e00022] px-5 py-2.5 text-xs font-bold text-white shadow-brand-glow-sm"
+                >
+                  <Plus className="w-4 h-4" />
+                  Criar Primeira Playlist
+                </button>
+              </div>
+            )
           ) : viewMode === 'library' && isHost ? (
             /* ==================== CENTRAL LIBRARY VIEW ==================== */
             <LibraryView
               tracks={tracks}
               playlists={playlists}
+              activeProfileId={activeProfileId}
+              activeProfileName={activeProfile?.name}
               maxUploadMb={maxUploadMb}
               currentTrackId={roomState?.currentTrack?.id || null}
               onPlayTrack={(track) => {
@@ -1923,32 +2103,51 @@ export const App: React.FC = () => {
           if (editingScene) {
             await api.updateScene(editingScene.id, payload);
           } else {
-            await api.createScene(payload);
+            await api.createScene({ ...payload, profileId: activeProfileId });
           }
           await refreshCatalog();
         }}
       />
 
-      {/* Host Authentication Modal */}
+      {/* Master Profiles Manager Modal */}
+      <ProfileManagerModal
+        open={profileModalOpen}
+        profiles={profiles}
+        activeProfileId={activeProfileId}
+        onSelectProfile={handleSelectProfile}
+        onProfilesChanged={handleProfilesChanged}
+        onClose={() => setProfileModalOpen(false)}
+      />
+
+      {/* Host Authentication Modal (Universal Password -> Master Profile Selection) */}
       {authModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
           <div className="w-full max-w-md rounded-md border border-[#2a2a33] bg-[#141417] p-6 space-y-4 shadow-2xl animate-in fade-in zoom-in-95">
             <div className="flex items-center justify-between border-b border-[#24242b] pb-3">
               <h3 className="font-sans text-base font-extrabold text-[#f0f4f5] flex items-center gap-2">
-                <Lock className="w-4 h-4 text-[#cc001e]" />
-                Autenticação do Anfitrião
+                {authStep === 'password' ? (
+                  <>
+                    <Lock className="w-4 h-4 text-[#cc001e]" />
+                    Autenticação do Mestre
+                  </>
+                ) : (
+                  <>
+                    <UserCog className="w-4 h-4 text-[#cc001e]" />
+                    Selecione seu Perfil de Mestre
+                  </>
+                )}
               </h3>
               <button
-                onClick={() => setAuthModalOpen(false)}
+                onClick={() => {
+                  setAuthModalOpen(false);
+                  setAuthStep('password');
+                  setAuthError(null);
+                }}
                 className="taste-btn p-1.5 rounded-md text-[#cbd5e1] hover:text-[#f0f4f5] hover:bg-[#23232a]"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
-
-            <p className="text-xs text-[#cbd5e1] leading-relaxed">
-              Informe a senha de mestre para liberar o painel de cenas, gerenciador de playlists e crossfade.
-            </p>
 
             {authError && (
               <div className="rounded-lg border border-[#cc001e]/40 bg-[#cc001e]/10 px-4 py-2.5 text-xs text-[#f0f4f5]">
@@ -1956,31 +2155,124 @@ export const App: React.FC = () => {
               </div>
             )}
 
-            <form onSubmit={handleHostLogin} className="space-y-4">
-              <input
-                type="password"
-                value={passwordInput}
-                onChange={(e) => setPasswordInput(e.target.value)}
-                placeholder="Senha de Anfitrião"
-                className="w-full rounded-lg border border-[#2a2a33] bg-[#0e0e0e] px-4 py-2.5 text-sm text-[#f0f4f5] placeholder-[#4f5660] focus:border-[#cc001e] focus:outline-none"
-                autoFocus
-              />
-              <div className="flex justify-end gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => setAuthModalOpen(false)}
-                  className="taste-btn rounded-lg border border-[#2a2a33] bg-[#1a1a1f] px-4 py-2 text-xs font-semibold text-[#cbd5e1] hover:text-[#f0f4f5]"
+            {authStep === 'password' ? (
+              <>
+                <p className="text-xs text-[#cbd5e1] leading-relaxed">
+                  Informe a senha universal de mestre para liberar o painel de controle e escolher o seu perfil de playlists.
+                </p>
+
+                <form onSubmit={handleHostLogin} className="space-y-4">
+                  <input
+                    type="password"
+                    value={passwordInput}
+                    onChange={(e) => setPasswordInput(e.target.value)}
+                    placeholder="Senha universal de mestre"
+                    className="w-full rounded-lg border border-[#2a2a33] bg-[#0e0e0e] px-4 py-2.5 text-sm text-[#f0f4f5] placeholder-[#4f5660] focus:border-[#cc001e] focus:outline-none"
+                    autoFocus
+                  />
+                  <div className="flex justify-end gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setAuthModalOpen(false)}
+                      className="taste-btn rounded-lg border border-[#2a2a33] bg-[#1a1a1f] px-4 py-2 text-xs font-semibold text-[#cbd5e1] hover:text-[#f0f4f5]"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      className="taste-btn rounded-lg bg-[#cc001e] hover:bg-[#e00022] px-5 py-2 text-xs font-bold text-white shadow-brand-glow-sm"
+                    >
+                      Continuar
+                    </button>
+                  </div>
+                </form>
+              </>
+            ) : (
+              <div className="space-y-4">
+                <p className="text-xs text-[#cbd5e1] leading-relaxed">
+                  Senha confirmada! Escolha qual perfil de mestre você vai usar nesta sessão (cada perfil mantém suas playlists e cenas separadas):
+                </p>
+
+                <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                  {profiles.map((profile) => {
+                    const isLastUsed = profile.id === activeProfileId;
+                    return (
+                      <button
+                        key={profile.id}
+                        type="button"
+                        onClick={() => handleCompleteHostProfileSelection(profile.id)}
+                        className={`taste-card w-full text-left rounded-lg border px-3.5 py-2.5 transition flex items-center justify-between gap-3 ${
+                          isLastUsed
+                            ? 'border-[#cc001e] bg-[#cc001e]/15'
+                            : 'border-[#24242b] bg-[#0e0e0e] hover:border-[#cc001e]/60 hover:bg-[#19191e]'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <span
+                            className="w-9 h-9 rounded-md flex items-center justify-center text-lg border shrink-0"
+                            style={{
+                              backgroundColor: `${profile.color || '#cc001e'}18`,
+                              borderColor: `${profile.color || '#cc001e'}55`,
+                            }}
+                          >
+                            {profile.avatar}
+                          </span>
+                          <div className="min-w-0">
+                            <p className="text-xs font-extrabold text-[#f0f4f5] truncate">
+                              {profile.name}
+                            </p>
+                            <p className="text-[10px] font-mono text-[#cbd5e1]">
+                              {profile.playlistCount ?? 0} playlists • {profile.sceneCount ?? 0} cenas
+                            </p>
+                          </div>
+                        </div>
+                        <span className="text-[11px] font-bold text-[#cc001e] shrink-0">
+                          Entrar →
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Quick create new profile right inside login */}
+                <form
+                  onSubmit={handleQuickCreateProfile}
+                  className="pt-3 border-t border-[#24242b] space-y-2.5"
                 >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="taste-btn rounded-lg bg-[#cc001e] hover:bg-[#e00022] px-5 py-2 text-xs font-bold text-white shadow-brand-glow-sm"
-                >
-                  Desbloquear
-                </button>
+                  <span className="block text-[10px] font-bold uppercase tracking-wider text-[#cbd5e1]">
+                    Ou criar novo perfil de mestre:
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={quickProfileAvatar}
+                      onChange={(e) => setQuickProfileAvatar(e.target.value)}
+                      className="rounded-lg border border-[#2a2a33] bg-[#0e0e0e] px-2 py-2 text-base focus:border-[#cc001e] focus:outline-none"
+                      title="Ícone do perfil"
+                    >
+                      {['🧙', '👑', '🐉', '⚔️', '🎲', '🦇', '🕯️', '🔮'].map((em) => (
+                        <option key={em} value={em}>
+                          {em}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="text"
+                      value={quickProfileName}
+                      onChange={(e) => setQuickProfileName(e.target.value)}
+                      placeholder="Nome do novo mestre..."
+                      className="flex-1 rounded-lg border border-[#2a2a33] bg-[#0e0e0e] px-3 py-2 text-xs text-[#f0f4f5] placeholder-[#4f5660] focus:border-[#cc001e] focus:outline-none"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!quickProfileName.trim() || creatingQuickProfile}
+                      className="taste-btn rounded-lg bg-[#cc001e] hover:bg-[#e00022] px-3.5 py-2 text-xs font-bold text-white disabled:opacity-40"
+                    >
+                      {creatingQuickProfile ? '...' : 'Criar'}
+                    </button>
+                  </div>
+                </form>
               </div>
-            </form>
+            )}
           </div>
         </div>
       )}

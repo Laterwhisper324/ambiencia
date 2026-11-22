@@ -1,8 +1,70 @@
-import type { Playlist, RoomPlaybackState, SceneButton, Track } from '../types';
+import type { MasterProfile, Playlist, RoomPlaybackState, SceneButton, Track } from '../types';
+
+export interface CloudSyncStatus {
+  enabled: boolean;
+  provider: 'upstash-redis' | 'none';
+  hydratedFromCloud: boolean;
+  lastSyncAt: string | null;
+  lastError: string | null;
+  pendingSync: boolean;
+  counts: {
+    profiles: number;
+    linkTracks: number;
+    playlists: number;
+    scenes: number;
+  };
+}
+
+export interface CloudLibrarySnapshot {
+  version: 1;
+  savedAt: string;
+  profiles: Array<{
+    id: string;
+    name: string;
+    avatar: string;
+    color: string;
+    description: string;
+    createdAt: string;
+  }>;
+  tracks: Array<{
+    id: string;
+    title: string;
+    sourceType: 'youtube';
+    youtubeId: string;
+    youtubeUrl: string;
+    thumbnailUrl: string | null;
+    durationSec: number;
+    tags: string[];
+    isAmbient: boolean;
+    createdAt: string;
+  }>;
+  playlists: Array<{
+    id: string;
+    profileId: string;
+    name: string;
+    description: string;
+    trackIds: string[];
+    createdAt: string;
+  }>;
+  scenes: Array<{
+    id: string;
+    profileId: string;
+    name: string;
+    emoji: string;
+    color: string;
+    playlistId: string | null;
+    ambientTrackId: string | null;
+    ambientVolume: number;
+    shortcutKey: number | null;
+    position: number;
+    createdAt: string;
+  }>;
+}
 
 const STORAGE_PASS_KEY = 'ambiencia_host_password';
 const STORAGE_TOKEN_KEY = 'ambiencia_host_token';
 const STORAGE_CLIENT_ID_KEY = 'ambiencia_client_id';
+const STORAGE_PROFILE_ID_KEY = 'ambiencia_master_profile_id';
 
 export const API_BASE_URL = (
   (import.meta.env.VITE_API_URL as string | undefined) ||
@@ -44,12 +106,29 @@ export function setStoredHostToken(token: string): void {
   localStorage.setItem(STORAGE_TOKEN_KEY, token);
 }
 
+export function getStoredProfileId(): string {
+  return localStorage.getItem(STORAGE_PROFILE_ID_KEY) || '';
+}
+
+export function setStoredProfileId(profileId: string): void {
+  if (profileId) {
+    localStorage.setItem(STORAGE_PROFILE_ID_KEY, profileId);
+  } else {
+    localStorage.removeItem(STORAGE_PROFILE_ID_KEY);
+  }
+}
+
 function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
-  return {
+  const headers: Record<string, string> = {
     'x-host-password': getStoredHostPassword(),
     'x-host-token': getStoredHostToken(),
     ...extra,
   };
+  const profileId = getStoredProfileId();
+  if (profileId) {
+    headers['x-master-profile-id'] = profileId;
+  }
+  return headers;
 }
 
 async function handleResponse<T>(res: Response): Promise<T> {
@@ -61,6 +140,51 @@ async function handleResponse<T>(res: Response): Promise<T> {
 }
 
 export const api = {
+  // Master Profiles
+  async getProfiles(): Promise<{ profiles: MasterProfile[] }> {
+    const res = await fetch(apiUrl('/api/profiles'));
+    return handleResponse(res);
+  },
+
+  async createProfile(payload: {
+    name: string;
+    avatar?: string;
+    color?: string;
+    description?: string;
+  }): Promise<{ profile: MasterProfile }> {
+    const res = await fetch(apiUrl('/api/profiles'), {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(payload),
+    });
+    return handleResponse(res);
+  },
+
+  async updateProfile(
+    id: string,
+    payload: {
+      name?: string;
+      avatar?: string;
+      color?: string;
+      description?: string;
+    }
+  ): Promise<{ profile: MasterProfile }> {
+    const res = await fetch(apiUrl(`/api/profiles/${encodeURIComponent(id)}`), {
+      method: 'PATCH',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(payload),
+    });
+    return handleResponse(res);
+  },
+
+  async deleteProfile(id: string): Promise<{ ok: boolean; profiles: MasterProfile[] }> {
+    const res = await fetch(apiUrl(`/api/profiles/${encodeURIComponent(id)}`), {
+      method: 'DELETE',
+      headers: authHeaders(),
+    });
+    return handleResponse(res);
+  },
+
   // Tracks
   async getTracks(search?: string, tag?: string): Promise<{ tracks: Track[]; maxUploadMb: number }> {
     const params = new URLSearchParams();
@@ -96,6 +220,7 @@ export const api = {
     tags?: string[];
     isAmbient?: boolean;
     targetPlaylistId?: string;
+    profileId?: string;
   }): Promise<{
     track: Track;
     tracks?: Track[];
@@ -131,8 +256,9 @@ export const api = {
   },
 
   // Playlists
-  async getPlaylists(): Promise<{ playlists: Playlist[] }> {
-    const res = await fetch(apiUrl('/api/playlists'));
+  async getPlaylists(profileId?: string): Promise<{ playlists: Playlist[] }> {
+    const qs = profileId ? `?profileId=${encodeURIComponent(profileId)}` : '';
+    const res = await fetch(apiUrl(`/api/playlists${qs}`));
     return handleResponse(res);
   },
 
@@ -140,6 +266,7 @@ export const api = {
     name: string;
     description?: string;
     trackIds?: string[];
+    profileId?: string;
   }): Promise<{ playlist: Playlist }> {
     const res = await fetch(apiUrl('/api/playlists'), {
       method: 'POST',
@@ -151,7 +278,7 @@ export const api = {
 
   async updatePlaylist(
     id: string,
-    payload: { name?: string; description?: string }
+    payload: { name?: string; description?: string; profileId?: string }
   ): Promise<{ playlist: Playlist }> {
     const res = await fetch(apiUrl(`/api/playlists/${id}`), {
       method: 'PATCH',
@@ -161,11 +288,15 @@ export const api = {
     return handleResponse(res);
   },
 
-  async duplicatePlaylist(id: string, name?: string): Promise<{ playlist: Playlist }> {
+  async duplicatePlaylist(
+    id: string,
+    name?: string,
+    targetProfileId?: string
+  ): Promise<{ playlist: Playlist }> {
     const res = await fetch(apiUrl(`/api/playlists/${id}/duplicate`), {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ name, targetProfileId }),
     });
     return handleResponse(res);
   },
@@ -197,8 +328,9 @@ export const api = {
   },
 
   // Scenes
-  async getScenes(): Promise<{ scenes: SceneButton[] }> {
-    const res = await fetch(apiUrl('/api/scenes'));
+  async getScenes(profileId?: string): Promise<{ scenes: SceneButton[] }> {
+    const qs = profileId ? `?profileId=${encodeURIComponent(profileId)}` : '';
+    const res = await fetch(apiUrl(`/api/scenes${qs}`));
     return handleResponse(res);
   },
 
@@ -210,6 +342,7 @@ export const api = {
     ambientTrackId?: string | null;
     ambientVolume?: number;
     shortcutKey?: number | null;
+    profileId?: string;
   }): Promise<{ scene: SceneButton }> {
     const res = await fetch(apiUrl('/api/scenes'), {
       method: 'POST',
@@ -304,6 +437,51 @@ export const api = {
         password: getStoredHostPassword(),
         hostToken: getStoredHostToken(),
       }),
+    });
+    return handleResponse(res);
+  },
+
+  // Cloud Persistence & JSON Backup
+  async getBackupStatus(): Promise<{ status: CloudSyncStatus }> {
+    const res = await fetch(apiUrl('/api/backup/status'));
+    return handleResponse(res);
+  },
+
+  async exportBackupJson(): Promise<{ snapshot: CloudLibrarySnapshot }> {
+    const res = await fetch(apiUrl('/api/backup/export'), {
+      headers: authHeaders(),
+    });
+    return handleResponse(res);
+  },
+
+  async importBackupJson(
+    snapshot: unknown,
+    mode: 'merge' | 'replace' = 'merge'
+  ): Promise<{
+    ok: boolean;
+    mode: 'merge' | 'replace';
+    result: {
+      profilesRestored: number;
+      tracksRestored: number;
+      playlistsRestored: number;
+      scenesRestored: number;
+      droppedLocalTrackRefs: number;
+    };
+    syncedToCloud: boolean;
+    status: CloudSyncStatus;
+  }> {
+    const res = await fetch(apiUrl('/api/backup/import'), {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ snapshot, mode }),
+    });
+    return handleResponse(res);
+  },
+
+  async forceCloudSync(): Promise<{ ok: boolean; status: CloudSyncStatus }> {
+    const res = await fetch(apiUrl('/api/backup/sync'), {
+      method: 'POST',
+      headers: authHeaders(),
     });
     return handleResponse(res);
   },

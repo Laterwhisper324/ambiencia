@@ -8,10 +8,13 @@ import rateLimit from 'express-rate-limit';
 import { Server as SocketIOServer } from 'socket.io';
 import { config } from './config';
 import { ensureSeedData } from './db/seed';
+import { getCloudSyncStatus } from './db/cloudPersistence';
 import { tracksRouter } from './routes/tracks';
 import { playlistsRouter } from './routes/playlists';
 import { scenesRouter } from './routes/scenes';
 import { roomsRouter } from './routes/rooms';
+import { profilesRouter } from './routes/profiles';
+import { backupRouter } from './routes/backup';
 import { setupSocketServer } from './socket/roomManager';
 
 export const app = express();
@@ -44,7 +47,7 @@ const corsOptions: cors.CorsOptions = {
 };
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({ limit: '5mb' }));
 
 // Ensure SQLite schema and seed data are initialized before handling requests
 const seedReadyPromise = ensureSeedData().catch((err) => {
@@ -77,6 +80,7 @@ const healthHandler: express.RequestHandler = (_req, res) => {
     app: 'Ambiência',
     storageProvider: config.storageProvider,
     maxUploadMb: config.maxUploadMb,
+    cloudSync: getCloudSyncStatus(),
     serverTime: Date.now(),
   });
 };
@@ -84,6 +88,8 @@ app.get('/api/health', healthHandler);
 app.get('/health', healthHandler);
 
 // Mount API routes (both with and without /api prefix for Vercel Services compatibility)
+app.use('/api/profiles', profilesRouter);
+app.use('/profiles', profilesRouter);
 app.use('/api/tracks', tracksRouter);
 app.use('/tracks', tracksRouter);
 app.use('/api/playlists', playlistsRouter);
@@ -92,6 +98,8 @@ app.use('/api/scenes', scenesRouter);
 app.use('/scenes', scenesRouter);
 app.use('/api/rooms', roomsRouter);
 app.use('/rooms', roomsRouter);
+app.use('/api/backup', backupRouter);
+app.use('/backup', backupRouter);
 
 // Serve static frontend in standalone production (when client/dist exists)
 if (!process.env.VERCEL) {
@@ -150,11 +158,19 @@ if (!process.env.VERCEL) {
   setupSocketServer(io);
 
   seedReadyPromise.then(() => {
+    const syncStatus = getCloudSyncStatus();
     server.listen(config.port, '0.0.0.0', () => {
       console.log(`========================================================`);
       console.log(`🎵 Ambiência Server rodando na porta ${config.port}`);
       console.log(`📁 Upload Dir: ${config.uploadDir} (Provider: ${config.storageProvider})`);
       console.log(`🗄️  SQLite DB:  ${config.databasePath}`);
+      console.log(
+        `☁️  Cloud Sync: ${
+          syncStatus.enabled
+            ? `Upstash Redis (Ativo${syncStatus.hydratedFromCloud ? ' • Restaurado da nuvem' : ''})`
+            : 'Desativado (apenas local + backup JSON manual)'
+        }`
+      );
       console.log(`🔑 Senha Anfitrião: [Protegida]`);
       console.log(`========================================================`);
     });

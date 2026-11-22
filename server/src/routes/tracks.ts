@@ -4,7 +4,14 @@ import crypto from 'crypto';
 import path from 'path';
 import rateLimit from 'express-rate-limit';
 import { config } from '../config';
-import { db, getAllTracks, getPlaylistById, getTrackById } from '../db/database';
+import {
+  db,
+  getAllTracks,
+  getPlaylistById,
+  getTrackById,
+  notifyDbChanged,
+  resolveValidProfileId,
+} from '../db/database';
 import { getStorageProvider, sanitizeFilename } from '../storage/StorageProvider';
 import {
   extractYouTubeId,
@@ -256,6 +263,7 @@ tracksRouter.post(
       );
 
       const created = getTrackById(id);
+      notifyDbChanged();
       res.status(201).json({ track: created });
     } catch (err) {
       console.error('[Tracks] Erro ao salvar upload:', err);
@@ -267,7 +275,9 @@ tracksRouter.post(
 // POST /api/tracks/youtube (Supports single video links AND YouTube / YouTube Music playlist links)
 tracksRouter.post('/youtube', requireHostAuth, async (req: Request, res: Response) => {
   try {
-    const { url, title, tags, isAmbient, targetPlaylistId } = req.body || {};
+    const { url, title, tags, isAmbient, targetPlaylistId, profileId } = req.body || {};
+    const headerProfileId = req.headers['x-master-profile-id'] as string | undefined;
+    const resolvedProfileId = resolveValidProfileId(profileId || headerProfileId);
     if (!url || typeof url !== 'string') {
       res.status(400).json({ error: 'Informe uma URL válida do YouTube ou YouTube Music.' });
       return;
@@ -315,10 +325,11 @@ tracksRouter.post('/youtube', requireHostAuth, async (req: Request, res: Respons
 
           if (!existingPl) {
             db.prepare(`
-              INSERT INTO playlists (id, name, description, created_at)
-              VALUES (?, ?, ?, ?)
+              INSERT INTO playlists (id, profile_id, name, description, created_at)
+              VALUES (?, ?, ?, ?, ?)
             `).run(
               newPlaylistId,
+              resolvedProfileId,
               plResult.playlistTitle.slice(0, 100),
               `Importada do YouTube / YouTube Music (${plResult.tracks.length} faixas)`,
               now
@@ -351,6 +362,7 @@ tracksRouter.post('/youtube', requireHostAuth, async (req: Request, res: Respons
         });
 
         importTx();
+        notifyDbChanged();
 
         const createdPlaylist = getPlaylistById(newPlaylistId);
         res.status(201).json({
@@ -390,6 +402,7 @@ tracksRouter.post('/youtube', requireHostAuth, async (req: Request, res: Respons
     );
 
     const created = getTrackById(id);
+    notifyDbChanged();
     res.status(201).json({ track: created, tracks: created ? [created] : [], isPlaylistImport: false });
   } catch (err) {
     const message =
@@ -430,6 +443,7 @@ tracksRouter.patch('/:id', requireHostAuth, (req: Request, res: Response) => {
     WHERE id = ?
   `).run(nextTitle, JSON.stringify(nextTags), nextAmbient ? 1 : 0, nextDuration, existing.id);
 
+  notifyDbChanged();
   res.json({ track: getTrackById(existing.id) });
 });
 
@@ -448,5 +462,6 @@ tracksRouter.delete('/:id', requireHostAuth, async (req: Request, res: Response)
     await storage.deleteFile(existing.storageKey);
   }
 
+  notifyDbChanged();
   res.json({ ok: true });
 });

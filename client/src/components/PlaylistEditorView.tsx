@@ -19,6 +19,7 @@ import { api } from '../services/api';
 interface Props {
   playlist: Playlist;
   allTracks: Track[];
+  activeProfileId: string;
   currentTrackId: string | null;
   onPlayPlaylist: (playlist: Playlist, startIndex?: number) => void;
   onRefreshData: () => Promise<void>;
@@ -28,6 +29,7 @@ interface Props {
 export const PlaylistEditorView: React.FC<Props> = ({
   playlist,
   allTracks,
+  activeProfileId,
   currentTrackId,
   onPlayPlaylist,
   onRefreshData,
@@ -54,7 +56,11 @@ export const PlaylistEditorView: React.FC<Props> = ({
   };
 
   const handleDuplicate = async () => {
-    const { playlist: copy } = await api.duplicatePlaylist(playlist.id);
+    const { playlist: copy } = await api.duplicatePlaylist(
+      playlist.id,
+      undefined,
+      activeProfileId
+    );
     await onRefreshData();
     onSelectPlaylistId(copy.id);
   };
@@ -103,6 +109,7 @@ export const PlaylistEditorView: React.FC<Props> = ({
       const res = await api.addYouTubeTrack({
         url: ytImportUrl.trim(),
         targetPlaylistId: playlist.id,
+        profileId: activeProfileId,
       });
       if (!res.isPlaylistImport && res.track) {
         await api.addTrackToPlaylist(playlist.id, res.track.id);

@@ -1,32 +1,42 @@
 import { Router, type Request, type Response } from 'express';
 import crypto from 'crypto';
-import { db, getAllPlaylists, getPlaylistById, getTrackById } from '../db/database';
+import {
+  db,
+  getAllPlaylists,
+  getPlaylistById,
+  getTrackById,
+  notifyDbChanged,
+  resolveValidProfileId,
+} from '../db/database';
 import { requireHostAuth } from '../middleware/auth';
 
 export const playlistsRouter = Router();
 
-// GET /api/playlists
-playlistsRouter.get('/', (_req: Request, res: Response) => {
-  res.json({ playlists: getAllPlaylists() });
+// GET /api/playlists (optionally filtered by ?profileId=...)
+playlistsRouter.get('/', (req: Request, res: Response) => {
+  const profileId = typeof req.query.profileId === 'string' ? req.query.profileId : undefined;
+  res.json({ playlists: getAllPlaylists(profileId) });
 });
 
 // POST /api/playlists
 playlistsRouter.post('/', requireHostAuth, (req: Request, res: Response) => {
-  const { name, description, trackIds } = req.body || {};
+  const { name, description, trackIds, profileId } = req.body || {};
   if (!name || typeof name !== 'string' || !name.trim()) {
     res.status(400).json({ error: 'O nome da playlist é obrigatório.' });
     return;
   }
 
+  const headerProfileId = req.headers['x-master-profile-id'] as string | undefined;
+  const resolvedProfileId = resolveValidProfileId(profileId || headerProfileId);
   const id = `playlist-${crypto.randomUUID()}`;
   const now = new Date().toISOString();
   const desc = typeof description === 'string' ? description.trim().slice(0, 300) : '';
 
   const createTx = db.transaction(() => {
     db.prepare(`
-      INSERT INTO playlists (id, name, description, created_at)
-      VALUES (?, ?, ?, ?)
-    `).run(id, name.trim().slice(0, 100), desc, now);
+      INSERT INTO playlists (id, profile_id, name, description, created_at)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(id, resolvedProfileId, name.trim().slice(0, 100), desc, now);
 
     if (Array.isArray(trackIds)) {
       const insertPt = db.prepare(`
@@ -42,10 +52,11 @@ playlistsRouter.post('/', requireHostAuth, (req: Request, res: Response) => {
   });
 
   createTx();
+  notifyDbChanged();
   res.status(201).json({ playlist: getPlaylistById(id) });
 });
 
-// PATCH /api/playlists/:id (Rename / update description)
+// PATCH /api/playlists/:id (Rename / update description / move between profiles)
 playlistsRouter.patch('/:id', requireHostAuth, (req: Request, res: Response) => {
   const existing = getPlaylistById(req.params.id);
   if (!existing) {
@@ -53,18 +64,24 @@ playlistsRouter.patch('/:id', requireHostAuth, (req: Request, res: Response) => 
     return;
   }
 
-  const { name, description } = req.body || {};
+  const { name, description, profileId } = req.body || {};
   const nextName =
     typeof name === 'string' && name.trim() ? name.trim().slice(0, 100) : existing.name;
   const nextDesc =
     typeof description === 'string' ? description.trim().slice(0, 300) : existing.description;
+  const nextProfileId =
+    typeof profileId === 'string' && profileId.trim()
+      ? resolveValidProfileId(profileId)
+      : existing.profileId;
 
-  db.prepare('UPDATE playlists SET name = ?, description = ? WHERE id = ?').run(
+  db.prepare('UPDATE playlists SET name = ?, description = ?, profile_id = ? WHERE id = ?').run(
     nextName,
     nextDesc,
+    nextProfileId,
     existing.id
   );
 
+  notifyDbChanged();
   res.json({ playlist: getPlaylistById(existing.id) });
 });
 
@@ -82,12 +99,18 @@ playlistsRouter.post('/:id/duplicate', requireHostAuth, (req: Request, res: Resp
     typeof req.body?.name === 'string' && req.body.name.trim()
       ? req.body.name.trim().slice(0, 100)
       : `${existing.name} (Cópia)`;
+  const targetProfileId = resolveValidProfileId(
+    req.body?.targetProfileId ||
+      req.body?.profileId ||
+      (req.headers['x-master-profile-id'] as string | undefined) ||
+      existing.profileId
+  );
 
   const dupTx = db.transaction(() => {
     db.prepare(`
-      INSERT INTO playlists (id, name, description, created_at)
-      VALUES (?, ?, ?, ?)
-    `).run(newId, customName, existing.description, now);
+      INSERT INTO playlists (id, profile_id, name, description, created_at)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(newId, targetProfileId, customName, existing.description, now);
 
     const insertPt = db.prepare(`
       INSERT INTO playlist_tracks (playlist_id, track_id, position)
@@ -99,6 +122,7 @@ playlistsRouter.post('/:id/duplicate', requireHostAuth, (req: Request, res: Resp
   });
 
   dupTx();
+  notifyDbChanged();
   res.status(201).json({ playlist: getPlaylistById(newId) });
 });
 
@@ -130,6 +154,7 @@ playlistsRouter.put('/:id/tracks', requireHostAuth, (req: Request, res: Response
   });
 
   updateTracksTx();
+  notifyDbChanged();
   res.json({ playlist: getPlaylistById(existing.id) });
 });
 
@@ -153,6 +178,7 @@ playlistsRouter.post('/:id/tracks', requireHostAuth, (req: Request, res: Respons
     VALUES (?, ?, ?)
   `).run(existing.id, trackId, nextPos);
 
+  notifyDbChanged();
   res.json({ playlist: getPlaylistById(existing.id) });
 });
 
@@ -165,5 +191,6 @@ playlistsRouter.delete('/:id', requireHostAuth, (req: Request, res: Response) =>
   }
 
   db.prepare('DELETE FROM playlists WHERE id = ?').run(existing.id);
+  notifyDbChanged();
   res.json({ ok: true });
 });

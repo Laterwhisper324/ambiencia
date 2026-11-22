@@ -1,7 +1,9 @@
 import fs from 'fs';
 import path from 'path';
 import { config } from '../config';
-import type { Playlist, SceneButton, Track } from '../types';
+import type { MasterProfile, Playlist, SceneButton, Track } from '../types';
+
+export const DEFAULT_PROFILE_ID = 'profile-default';
 
 export interface StatementLike {
   run: (...params: any[]) => any;
@@ -14,6 +16,40 @@ export interface DatabaseLike {
   pragma: (sql: string) => void;
   prepare: (sql: string) => StatementLike;
   transaction: <T extends (...args: any[]) => any>(fn: T) => T;
+}
+
+/**
+ * Lightweight pub/sub hook for database mutations.
+ * External persistence layers (e.g. cloud snapshot sync to Upstash Redis / Gist)
+ * can register a listener here without needing to modify every route handler.
+ */
+type DbChangeListener = () => void;
+const dbChangeListeners = new Set<DbChangeListener>();
+
+export function registerDbChangeListener(listener: DbChangeListener): () => void {
+  dbChangeListeners.add(listener);
+  return () => {
+    dbChangeListeners.delete(listener);
+  };
+}
+
+export function notifyDbChanged(): void {
+  for (const listener of dbChangeListeners) {
+    try {
+      listener();
+    } catch (err) {
+      console.warn('[DB] Erro em listener de alteração do banco:', err);
+    }
+  }
+}
+
+interface MasterProfileRow {
+  id: string;
+  name: string;
+  avatar: string;
+  color: string;
+  description: string;
+  created_at: string;
 }
 
 interface TrackRow {
@@ -35,6 +71,7 @@ interface TrackRow {
 
 interface PlaylistRow {
   id: string;
+  profile_id: string;
   name: string;
   description: string;
   created_at: string;
@@ -49,6 +86,7 @@ interface PlaylistTrackRow {
 
 interface SceneRow {
   id: string;
+  profile_id: string;
   name: string;
   emoji: string;
   color: string;
@@ -69,6 +107,7 @@ interface RoomRow {
 }
 
 interface JsonStoreData {
+  master_profiles: MasterProfileRow[];
   tracks: TrackRow[];
   playlists: PlaylistRow[];
   playlist_tracks: PlaylistTrackRow[];
@@ -94,12 +133,30 @@ class JsonFallbackDatabase implements DatabaseLike {
     try {
       if (fs.existsSync(this.filePath)) {
         const raw = fs.readFileSync(this.filePath, 'utf-8');
-        return JSON.parse(raw) as JsonStoreData;
+        const parsed = JSON.parse(raw) as Partial<JsonStoreData>;
+        const playlists = (parsed.playlists || []).map((p) => ({
+          ...p,
+          profile_id: p.profile_id || DEFAULT_PROFILE_ID,
+        }));
+        const scene_buttons = (parsed.scene_buttons || []).map((s) => ({
+          ...s,
+          profile_id: s.profile_id || DEFAULT_PROFILE_ID,
+        }));
+        return {
+          master_profiles: parsed.master_profiles || [],
+          tracks: parsed.tracks || [],
+          playlists,
+          playlist_tracks: parsed.playlist_tracks || [],
+          scene_buttons,
+          rooms: parsed.rooms || [],
+          nextPtId: parsed.nextPtId || 1,
+        };
       }
     } catch (err) {
       console.warn('[DB Fallback] Aviso ao ler JSON store:', err);
     }
     return {
+      master_profiles: [],
       tracks: [],
       playlists: [],
       playlist_tracks: [],
@@ -143,8 +200,24 @@ class JsonFallbackDatabase implements DatabaseLike {
 
     return {
       get: (...params: any[]) => {
+        if (normLower.includes('select count(*) as total from playlists where profile_id = ?')) {
+          return {
+            total: this.data.playlists.filter((p) => p.profile_id === params[0]).length,
+          };
+        }
         if (normLower.includes('select count(*) as total from playlists')) {
           return { total: this.data.playlists.length };
+        }
+        if (normLower.includes('select count(*) as total from scene_buttons where profile_id = ?')) {
+          return {
+            total: this.data.scene_buttons.filter((s) => s.profile_id === params[0]).length,
+          };
+        }
+        if (normLower.includes('select count(*) as total from master_profiles')) {
+          return { total: this.data.master_profiles.length };
+        }
+        if (normLower.includes('from master_profiles where id = ?')) {
+          return this.data.master_profiles.find((p) => p.id === params[0]);
         }
         if (normLower.includes('from tracks where id = ?')) {
           return this.data.tracks.find((t) => t.id === params[0]);
@@ -165,10 +238,23 @@ class JsonFallbackDatabase implements DatabaseLike {
       },
 
       all: (...params: any[]) => {
+        if (normLower.startsWith('pragma table_info(')) {
+          return [{ name: 'profile_id' }];
+        }
+        if (normLower.includes('from master_profiles order by created_at asc')) {
+          return [...this.data.master_profiles].sort((a, b) =>
+            a.created_at.localeCompare(b.created_at)
+          );
+        }
         if (normLower.includes('from tracks order by created_at desc')) {
           return [...this.data.tracks].sort((a, b) =>
             b.created_at.localeCompare(a.created_at)
           );
+        }
+        if (normLower.includes('from playlists where profile_id = ? order by created_at asc')) {
+          return this.data.playlists
+            .filter((p) => p.profile_id === params[0])
+            .sort((a, b) => a.created_at.localeCompare(b.created_at));
         }
         if (normLower.includes('from playlists order by created_at asc')) {
           return [...this.data.playlists].sort((a, b) =>
@@ -184,6 +270,11 @@ class JsonFallbackDatabase implements DatabaseLike {
             .map((pt) => this.data.tracks.find((t) => t.id === pt.track_id))
             .filter((t): t is TrackRow => Boolean(t));
         }
+        if (normLower.includes('from scene_buttons where profile_id = ? order by position asc')) {
+          return this.data.scene_buttons
+            .filter((s) => s.profile_id === params[0])
+            .sort((a, b) => a.position - b.position || a.created_at.localeCompare(b.created_at));
+        }
         if (normLower.includes('from scene_buttons order by position asc')) {
           return [...this.data.scene_buttons].sort(
             (a, b) => a.position - b.position || a.created_at.localeCompare(b.created_at)
@@ -193,6 +284,61 @@ class JsonFallbackDatabase implements DatabaseLike {
       },
 
       run: (...params: any[]) => {
+        // Master profiles
+        if (normLower.startsWith('insert') && normLower.includes('into master_profiles')) {
+          const [id, name, avatar, color, description, created_at] = params;
+          const existingIdx = this.data.master_profiles.findIndex((p) => p.id === id);
+          if (existingIdx === -1) {
+            this.data.master_profiles.push({
+              id,
+              name,
+              avatar,
+              color,
+              description,
+              created_at,
+            });
+          } else if (normLower.includes('replace')) {
+            this.data.master_profiles[existingIdx] = {
+              id,
+              name,
+              avatar,
+              color,
+              description,
+              created_at,
+            };
+          }
+          this.save();
+          return { changes: 1 };
+        }
+
+        if (normLower.startsWith('update master_profiles')) {
+          const [name, avatar, color, description, id] = params;
+          const profile = this.data.master_profiles.find((p) => p.id === id);
+          if (profile) {
+            profile.name = name;
+            profile.avatar = avatar;
+            profile.color = color;
+            profile.description = description;
+            this.save();
+          }
+          return { changes: profile ? 1 : 0 };
+        }
+
+        if (normLower.startsWith('delete from master_profiles where id = ?')) {
+          const id = params[0];
+          const removedPlaylistIds = new Set(
+            this.data.playlists.filter((p) => p.profile_id === id).map((p) => p.id)
+          );
+          this.data.master_profiles = this.data.master_profiles.filter((p) => p.id !== id);
+          this.data.playlists = this.data.playlists.filter((p) => p.profile_id !== id);
+          this.data.playlist_tracks = this.data.playlist_tracks.filter(
+            (pt) => !removedPlaylistIds.has(pt.playlist_id)
+          );
+          this.data.scene_buttons = this.data.scene_buttons.filter((s) => s.profile_id !== id);
+          this.save();
+          return { changes: 1 };
+        }
+
         // Tracks
         if (normLower.startsWith('insert') && normLower.includes('into tracks')) {
           const isMp3Literal = normLower.includes("'mp3'");
@@ -287,11 +433,40 @@ class JsonFallbackDatabase implements DatabaseLike {
         }
 
         // Playlists
-        if (normLower.startsWith('insert into playlists')) {
-          const [id, name, description, created_at] = params;
-          this.data.playlists.push({ id, name, description, created_at });
+        if (normLower.startsWith('insert') && normLower.includes('into playlists')) {
+          if (normLower.includes('profile_id')) {
+            const [id, profile_id, name, description, created_at] = params;
+            this.data.playlists.push({
+              id,
+              profile_id: profile_id || DEFAULT_PROFILE_ID,
+              name,
+              description,
+              created_at,
+            });
+          } else {
+            const [id, name, description, created_at] = params;
+            this.data.playlists.push({
+              id,
+              profile_id: DEFAULT_PROFILE_ID,
+              name,
+              description,
+              created_at,
+            });
+          }
           this.save();
           return { changes: 1 };
+        }
+
+        if (normLower.startsWith('update playlists set name = ?, description = ?, profile_id = ?')) {
+          const [name, description, profile_id, id] = params;
+          const pl = this.data.playlists.find((p) => p.id === id);
+          if (pl) {
+            pl.name = name;
+            pl.description = description;
+            pl.profile_id = profile_id;
+            this.save();
+          }
+          return { changes: pl ? 1 : 0 };
         }
 
         if (normLower.startsWith('update playlists set name = ?')) {
@@ -303,6 +478,15 @@ class JsonFallbackDatabase implements DatabaseLike {
             this.save();
           }
           return { changes: pl ? 1 : 0 };
+        }
+
+        if (normLower.startsWith('update playlists set profile_id = ? where profile_id is null')) {
+          const defaultId = params[0];
+          this.data.playlists.forEach((p) => {
+            if (!p.profile_id) p.profile_id = defaultId;
+          });
+          this.save();
+          return { changes: 1 };
         }
 
         if (normLower.startsWith('delete from playlists where id = ?')) {
@@ -341,30 +525,69 @@ class JsonFallbackDatabase implements DatabaseLike {
         }
 
         // Scenes
-        if (normLower.startsWith('insert into scene_buttons')) {
-          const [
-            id,
-            name,
-            emoji,
-            color,
-            playlist_id,
-            ambient_track_id,
-            ambient_volume,
-            shortcut_key,
-            position,
-            created_at,
-          ] = params;
-          this.data.scene_buttons.push({
-            id,
-            name,
-            emoji,
-            color,
-            playlist_id,
-            ambient_track_id,
-            ambient_volume,
-            shortcut_key,
-            position,
-            created_at,
+        if (normLower.startsWith('insert') && normLower.includes('into scene_buttons')) {
+          if (normLower.includes('profile_id')) {
+            const [
+              id,
+              profile_id,
+              name,
+              emoji,
+              color,
+              playlist_id,
+              ambient_track_id,
+              ambient_volume,
+              shortcut_key,
+              position,
+              created_at,
+            ] = params;
+            this.data.scene_buttons.push({
+              id,
+              profile_id: profile_id || DEFAULT_PROFILE_ID,
+              name,
+              emoji,
+              color,
+              playlist_id,
+              ambient_track_id,
+              ambient_volume,
+              shortcut_key,
+              position,
+              created_at,
+            });
+          } else {
+            const [
+              id,
+              name,
+              emoji,
+              color,
+              playlist_id,
+              ambient_track_id,
+              ambient_volume,
+              shortcut_key,
+              position,
+              created_at,
+            ] = params;
+            this.data.scene_buttons.push({
+              id,
+              profile_id: DEFAULT_PROFILE_ID,
+              name,
+              emoji,
+              color,
+              playlist_id,
+              ambient_track_id,
+              ambient_volume,
+              shortcut_key,
+              position,
+              created_at,
+            });
+          }
+          this.save();
+          return { changes: 1 };
+        }
+
+        if (normLower.startsWith('update scene_buttons set profile_id = ? where profile_id is null')) {
+          const defaultId = params[0];
+          this.data.scene_buttons.forEach((s) => {
+            if (!s.profile_id) s.profile_id = defaultId;
           });
           this.save();
           return { changes: 1 };
@@ -487,8 +710,61 @@ function createDatabaseConnection(): DatabaseLike {
 
 export const db: DatabaseLike = createDatabaseConnection();
 
+function ensureColumnExists(tableName: string, columnName: string, alterSql: string): void {
+  try {
+    const columns = db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
+    const hasColumn = columns.some((col) => col.name === columnName);
+    if (!hasColumn) {
+      db.exec(alterSql);
+      console.log(`[DB Migration] Coluna "${columnName}" adicionada à tabela "${tableName}".`);
+    }
+  } catch (err) {
+    console.warn(`[DB Migration] Aviso ao verificar coluna ${tableName}.${columnName}:`, err);
+  }
+}
+
+export function ensureDefaultProfile(): MasterProfile {
+  const existing = getProfileById(DEFAULT_PROFILE_ID);
+  if (existing) return existing;
+
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT OR IGNORE INTO master_profiles (id, name, avatar, color, description, created_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(
+    DEFAULT_PROFILE_ID,
+    'Mestre Principal',
+    '👑',
+    '#cc001e',
+    'Perfil padrão com as playlists e cenas iniciais da mesa.',
+    now
+  );
+
+  return (
+    getProfileById(DEFAULT_PROFILE_ID) || {
+      id: DEFAULT_PROFILE_ID,
+      name: 'Mestre Principal',
+      avatar: '👑',
+      color: '#cc001e',
+      description: 'Perfil padrão com as playlists e cenas iniciais da mesa.',
+      playlistCount: 0,
+      sceneCount: 0,
+      createdAt: now,
+    }
+  );
+}
+
 export function initSchema(): void {
   db.exec(`
+    CREATE TABLE IF NOT EXISTS master_profiles (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      avatar TEXT NOT NULL DEFAULT '🎭',
+      color TEXT NOT NULL DEFAULT '#cc001e',
+      description TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS tracks (
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
@@ -508,9 +784,11 @@ export function initSchema(): void {
 
     CREATE TABLE IF NOT EXISTS playlists (
       id TEXT PRIMARY KEY,
+      profile_id TEXT NOT NULL DEFAULT 'profile-default',
       name TEXT NOT NULL,
       description TEXT NOT NULL DEFAULT '',
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (profile_id) REFERENCES master_profiles(id) ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS playlist_tracks (
@@ -524,6 +802,7 @@ export function initSchema(): void {
 
     CREATE TABLE IF NOT EXISTS scene_buttons (
       id TEXT PRIMARY KEY,
+      profile_id TEXT NOT NULL DEFAULT 'profile-default',
       name TEXT NOT NULL,
       emoji TEXT NOT NULL,
       color TEXT NOT NULL,
@@ -533,6 +812,7 @@ export function initSchema(): void {
       shortcut_key INTEGER,
       position INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL,
+      FOREIGN KEY (profile_id) REFERENCES master_profiles(id) ON DELETE CASCADE,
       FOREIGN KEY (playlist_id) REFERENCES playlists(id) ON DELETE SET NULL,
       FOREIGN KEY (ambient_track_id) REFERENCES tracks(id) ON DELETE SET NULL
     );
@@ -545,6 +825,73 @@ export function initSchema(): void {
       created_at TEXT NOT NULL
     );
   `);
+
+  // Safe migrations for databases created before Master Profiles existed
+  ensureDefaultProfile();
+  ensureColumnExists(
+    'playlists',
+    'profile_id',
+    `ALTER TABLE playlists ADD COLUMN profile_id TEXT NOT NULL DEFAULT '${DEFAULT_PROFILE_ID}'`
+  );
+  ensureColumnExists(
+    'scene_buttons',
+    'profile_id',
+    `ALTER TABLE scene_buttons ADD COLUMN profile_id TEXT NOT NULL DEFAULT '${DEFAULT_PROFILE_ID}'`
+  );
+
+  db.prepare(
+    `UPDATE playlists SET profile_id = ? WHERE profile_id IS NULL OR TRIM(profile_id) = ''`
+  ).run(DEFAULT_PROFILE_ID);
+  db.prepare(
+    `UPDATE scene_buttons SET profile_id = ? WHERE profile_id IS NULL OR TRIM(profile_id) = ''`
+  ).run(DEFAULT_PROFILE_ID);
+}
+
+export function mapProfileRow(row: MasterProfileRow): MasterProfile {
+  const plCountRow = db
+    .prepare('SELECT COUNT(*) as total FROM playlists WHERE profile_id = ?')
+    .get(row.id) as { total: number } | undefined;
+  const scCountRow = db
+    .prepare('SELECT COUNT(*) as total FROM scene_buttons WHERE profile_id = ?')
+    .get(row.id) as { total: number } | undefined;
+
+  return {
+    id: row.id,
+    name: row.name,
+    avatar: row.avatar || '🎭',
+    color: row.color || '#cc001e',
+    description: row.description || '',
+    playlistCount: plCountRow?.total ?? 0,
+    sceneCount: scCountRow?.total ?? 0,
+    createdAt: row.created_at,
+  };
+}
+
+export function getAllProfiles(): MasterProfile[] {
+  const rows = db
+    .prepare('SELECT * FROM master_profiles ORDER BY created_at ASC')
+    .all() as MasterProfileRow[];
+  if (rows.length === 0) {
+    return [ensureDefaultProfile()];
+  }
+  return rows.map(mapProfileRow);
+}
+
+export function getProfileById(id: string): MasterProfile | null {
+  const row = db
+    .prepare('SELECT * FROM master_profiles WHERE id = ?')
+    .get(id) as MasterProfileRow | undefined;
+  return row ? mapProfileRow(row) : null;
+}
+
+export function resolveValidProfileId(profileId?: string | null): string {
+  if (typeof profileId === 'string' && profileId.trim()) {
+    const found = getProfileById(profileId.trim());
+    if (found) return found.id;
+  }
+  const profiles = getAllProfiles();
+  if (profiles.length > 0) return profiles[0].id;
+  return ensureDefaultProfile().id;
 }
 
 export function mapTrackRow(row: TrackRow): Track {
@@ -617,6 +964,7 @@ export function getPlaylistById(id: string): Playlist | null {
 
   return {
     id: pRow.id,
+    profileId: pRow.profile_id || DEFAULT_PROFILE_ID,
     name: pRow.name,
     description: pRow.description,
     tracks: trackRows.map(mapTrackRow),
@@ -624,10 +972,15 @@ export function getPlaylistById(id: string): Playlist | null {
   };
 }
 
-export function getAllPlaylists(): Playlist[] {
-  const pRows = db
-    .prepare('SELECT * FROM playlists ORDER BY created_at ASC')
-    .all() as PlaylistRow[];
+export function getAllPlaylists(profileId?: string): Playlist[] {
+  const pRows =
+    profileId && profileId.trim()
+      ? (db
+          .prepare('SELECT * FROM playlists WHERE profile_id = ? ORDER BY created_at ASC')
+          .all(profileId.trim()) as PlaylistRow[])
+      : (db
+          .prepare('SELECT * FROM playlists ORDER BY created_at ASC')
+          .all() as PlaylistRow[]);
 
   return pRows
     .map((p) => getPlaylistById(p.id))
@@ -637,6 +990,7 @@ export function getAllPlaylists(): Playlist[] {
 export function mapSceneRow(row: SceneRow): SceneButton {
   return {
     id: row.id,
+    profileId: row.profile_id || DEFAULT_PROFILE_ID,
     name: row.name,
     emoji: row.emoji,
     color: row.color,
@@ -649,10 +1003,17 @@ export function mapSceneRow(row: SceneRow): SceneButton {
   };
 }
 
-export function getAllScenes(): SceneButton[] {
-  const rows = db
-    .prepare('SELECT * FROM scene_buttons ORDER BY position ASC, created_at ASC')
-    .all() as SceneRow[];
+export function getAllScenes(profileId?: string): SceneButton[] {
+  const rows =
+    profileId && profileId.trim()
+      ? (db
+          .prepare(
+            'SELECT * FROM scene_buttons WHERE profile_id = ? ORDER BY position ASC, created_at ASC'
+          )
+          .all(profileId.trim()) as SceneRow[])
+      : (db
+          .prepare('SELECT * FROM scene_buttons ORDER BY position ASC, created_at ASC')
+          .all() as SceneRow[]);
   return rows.map(mapSceneRow);
 }
 
